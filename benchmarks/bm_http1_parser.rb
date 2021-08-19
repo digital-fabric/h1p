@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'bundler/setup'
-
-HTTP_REQUEST = "GET /foo HTTP/1.1\r\nHost: example.com\r\nAccept: */*\r\n\r\n"
+HTTP_REQUEST = "GET /foo HTTP/1.1\r\nHost: example.com\r\nAccept: */*\r\nUser-Agent: foobar\r\n\r\n"
 
 def measure_time_and_allocs
   4.times { GC.start }
@@ -31,10 +29,12 @@ def benchmark_other_http1_parser(iterations)
   parser = Http::Parser.new
   done = false
   headers = nil
+  rx = 0
   parser.on_headers_complete = proc do |h|
     headers = h
     headers[':method'] = parser.http_method
     headers[':path'] = parser.request_url
+    headers[':rx'] = rx
   end
   parser.on_message_complete = proc { done = true }
 
@@ -42,8 +42,10 @@ def benchmark_other_http1_parser(iterations)
     iterations.times do
       o << HTTP_REQUEST
       done = false
+      rx = 0
       while !done
         msg = i.readpartial(4096)
+        rx += msg.bytesize
         parser << msg
       end
     end
@@ -52,11 +54,10 @@ def benchmark_other_http1_parser(iterations)
 end
 
 def benchmark_tipi_http1_parser(iterations)
-  STDOUT << "tipi parser: "
-  require_relative '../lib/tipi_ext'
+  STDOUT << "H1P parser: "
+  require_relative '../lib/h1p'
   i, o = IO.pipe
-  reader = proc { |len| i.readpartial(len) }
-  parser = Tipi::HTTP1Parser.new(reader)
+  parser = H1P::Parser.new(i)
 
   elapsed, allocated = measure_time_and_allocs do
     iterations.times do
@@ -78,8 +79,8 @@ def fork_benchmark(method, iterations)
   Process.wait(pid)
 end
 
-x = 500000
-# fork_benchmark(:benchmark_other_http1_parser, x)
-# fork_benchmark(:benchmark_tipi_http1_parser, x)
+x = 100000
+fork_benchmark(:benchmark_other_http1_parser, x)
+fork_benchmark(:benchmark_tipi_http1_parser, x)
 
-benchmark_tipi_http1_parser(x)
+# benchmark_tipi_http1_parser(x)
