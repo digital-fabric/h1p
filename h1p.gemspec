@@ -1,0 +1,25 @@
+require_relative './lib/h1p/version'
+
+Gem::Specification.new do |s|
+  s.name        = 'h1p'
+  s.version     = H1P::VERSION
+  s.licenses    = ['MIT']
+  s.summary     = 'H1P is a blocking HTTP/1 parser for Ruby'
+  s.author      = 'Sharon Rosner'
+  s.email       = 'sharon@noteflakes.com'
+  s.files       = `git ls-files`.split
+  s.homepage    = 'http://github.com/digital-fabric/h1p'
+  s.metadata    = {
+    "source_code_uri" => "https://github.com/digital-fabric/h1p"
+  }
+  s.rdoc_options = ["--title", "h1p", "--main", "README.md"]
+  s.extra_rdoc_files = ["README.md"]
+  s.extensions = ["ext/h1p/extconf.rb"]
+  s.require_paths = ["lib"]
+  s.required_ruby_version = '>= 2.6'
+
+  s.add_development_dependency  'rake-compiler',        '1.1.1'
+  s.add_development_dependency  'rake',               '~>12.3.3'
+  s.add_development_dependency  'minitest',           '~>5.11.3'
+  s.add_development_dependency  'minitest-reporters', '~>1.4.2'
+end
