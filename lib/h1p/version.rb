@@ -1,5 +1,5 @@
 # frozen_string_literal: true
 
 module H1P
-  VERSION = '0.42'
+  VERSION = '0.1'
 end
