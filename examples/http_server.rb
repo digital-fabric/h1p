@@ -1,41 +1,39 @@
 # frozen_string_literal: true
 
 require 'bundler/setup'
-require 'tipi'
-
-opts = {
-  reuse_addr:  true,
-  dont_linger: true
-}
+require 'h1p'
 
 puts "pid: #{Process.pid}"
-puts 'Listening on port 10080...'
+puts 'Listening on port 1234...'
 
-# GC.disable
-# Thread.current.backend.idle_gc_period = 60
+trap('SIGINT') { exit! }
 
-spin_loop(interval: 10) { p Thread.backend.stats }
+def handle_client(conn)
+  Thread.new do
+    parser = H1P::Parser.new(conn)
+    loop do
+      headers = parser.parse_headers
+      break unless headers
 
-spin_loop(interval: 10) do
-  GC.compact
+      req_body = parser.read_body
+      
+      p headers: headers
+      p body: req_body
+
+      resp = 'Hello, world!'
+      conn << "HTTP/1.1 200 OK\r\nContent-Length: #{resp.bytesize}\r\n\r\n#{resp}"
+    rescue H1P::Error => e
+      puts "Invalid request: #{e.message}"
+    ensure
+      conn.close
+      break
+    end
+  end
 end
 
-spin do
-  Tipi.serve('0.0.0.0', 10080, opts) do |req|
-    if req.path == '/stream'
-      req.send_headers('Foo' => 'Bar')
-      sleep 1
-      req.send_chunk("foo\n")
-      sleep 1
-      req.send_chunk("bar\n")
-      req.finish
-    elsif req.path == '/upload'
-      body = req.read
-      req.respond("Body: #{body.inspect} (#{body.bytesize} bytes)")
-    else
-      req.respond("Hello world!\n")
-    end
-#    p req.transfer_counts
-  end
-  p 'done...'
-end.await
+require 'socket'
+server = TCPServer.new('0.0.0.0', 1234)
+loop do
+  conn = server.accept
+  handle_client(conn)
+end

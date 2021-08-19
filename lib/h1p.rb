@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'h1p_ext'
+require_relative './h1p_ext'
 
 unless Object.const_defined?('Polyphony')
   class IO
