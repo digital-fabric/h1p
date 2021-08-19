@@ -15,7 +15,8 @@ The H1P was originally written as part of
 [Polyphony](https://github.com/digital-fabric/polyphony).
 
 > H1P is still a very young project and as such should be used with caution. It
-> has not undergone conformance or security testing.
+> has not undergone any significant conformance or security testing, and its API
+> is not yet stable.
 
 ## Features
 
@@ -73,8 +74,8 @@ The headers hash contains the following "pseudo-headers":
 The header keys are always lower-cased. Consider the following HTTP request:
 
 ```
-GET / HTTP/1.1
-Host: localhost:1234
+GET /foo HTTP/1.1
+Host: example.com
 User-Agent: curl/7.74.0
 Accept: */*
 
@@ -85,9 +86,9 @@ The request will be parsed into the following Ruby hash:
 ```ruby
 {
   ":method"     => "get",
-  ":path"       => "/",
+  ":path"       => "/foo",
   ":protocol"   => "http/1.1",
-  "host"        => "localhost:1234",
+  "host"        => "example.com",
   "user-agent"  => "curl/7.74.0",
   "accept"      => "*/*",
   ":rx"         => 78
