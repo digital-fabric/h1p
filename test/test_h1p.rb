@@ -22,7 +22,7 @@ class H1PTest < MiniTest::Test
 
     assert_equal(
       {
-        ':method' => 'get',
+        ':method' => 'GET',
         ':path' => '/',
         ':protocol' => 'http/1.1',
         ':rx' => msg.bytesize
@@ -38,7 +38,7 @@ class H1PTest < MiniTest::Test
 
     assert_equal(
       {
-        ':method' => 'get',
+        ':method' => 'GET',
         ':path' => '/',
         ':protocol' => 'http/1.1',
         ':rx' => msg.bytesize
@@ -57,17 +57,17 @@ class H1PTest < MiniTest::Test
   def test_method_case
     @o << "GET / HTTP/1.1\r\n\r\n"
     headers = @parser.parse_headers
-    assert_equal 'get', headers[':method']
+    assert_equal 'GET', headers[':method']
 
     reset_parser
     @o << "post / HTTP/1.1\r\n\r\n"
     headers = @parser.parse_headers
-    assert_equal 'post', headers[':method']
+    assert_equal 'POST', headers[':method']
 
     reset_parser
     @o << "PoST / HTTP/1.1\r\n\r\n"
     headers = @parser.parse_headers
-    assert_equal 'post', headers[':method']
+    assert_equal 'POST', headers[':method']
   end
 
   def test_bad_method
@@ -80,7 +80,7 @@ class H1PTest < MiniTest::Test
 
     reset_parser
     @o << "#{'a' * max_length} / HTTP/1.1\r\n\r\n"
-    assert_equal 'a' * max_length, @parser.parse_headers[':method']
+    assert_equal 'A' * max_length, @parser.parse_headers[':method']
 
     reset_parser
     @o << "#{'a' * (max_length + 1)} / HTTP/1.1\r\n\r\n"
@@ -245,7 +245,7 @@ class H1PTest < MiniTest::Test
     @o << msg
     headers = @parser.parse_headers
     assert_equal({
-      ':method'   => 'get',
+      ':method'   => 'GET',
       ':path'     => '/foo',
       ':protocol' => 'http/1.1',
       'bar'       => 'baz',
@@ -534,7 +534,7 @@ class H1PTest < MiniTest::Test
     client << msg
     reply = client.read
     assert_equal({
-      ':method' => 'get',
+      ':method' => 'GET',
       ':path' => '/foo',
       ':protocol' => 'http/1.1',
       'cookie' => 'abc=def',
@@ -560,7 +560,7 @@ class H1PTest < MiniTest::Test
 
     headers = parser.parse_headers
     assert_equal({
-      ':method' => 'get',
+      ':method' => 'GET',
       ':path' => '/foo',
       ':protocol' => 'http/1.1',
       'host' => 'bar',
@@ -572,7 +572,7 @@ class H1PTest < MiniTest::Test
     request = +"GET /bar HTTP/1.1\r\nHost: baz\r\n\r\n"
     headers = parser.parse_headers
     assert_equal({
-      ':method' => 'get',
+      ':method' => 'GET',
       ':path' => '/bar',
       ':protocol' => 'http/1.1',
       'host' => 'baz',

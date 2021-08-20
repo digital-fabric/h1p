@@ -24,6 +24,7 @@ ID ID_parser_read_method;
 ID ID_read;
 ID ID_readpartial;
 ID ID_to_i;
+ID ID_upcase;
 
 static VALUE mPolyphony = Qnil;
 static VALUE cError;
@@ -145,6 +146,7 @@ VALUE Parser_initialize(VALUE self, VALUE io) {
 ////////////////////////////////////////////////////////////////////////////////
 
 #define str_downcase(str) (rb_funcall((str), ID_downcase, 0))
+#define str_upcase(str) (rb_funcall((str), ID_upcase, 0))
 
 #define FILL_BUFFER_OR_GOTO_EOF(state) { if (!fill_buffer(state)) goto eof; }
 
@@ -155,6 +157,7 @@ VALUE Parser_initialize(VALUE self, VALUE io) {
 #define BUFFER_PTR(state, pos) ((state)->ptr + pos)
 #define BUFFER_STR(state, pos, len) (rb_obj_freeze(rb_utf8_str_new((state)->ptr + pos, len)))
 #define BUFFER_STR_DOWNCASE(state, pos, len) (rb_obj_freeze(str_downcase(rb_utf8_str_new((state)->ptr + pos, len))))
+#define BUFFER_STR_UPCASE(state, pos, len) (rb_obj_freeze(str_upcase(rb_utf8_str_new((state)->ptr + pos, len))))
 
 #define INC_BUFFER_POS(state) { \
   BUFFER_POS(state)++; \
@@ -205,6 +208,12 @@ VALUE Parser_initialize(VALUE self, VALUE io) {
 
 #define SET_HEADER_DOWNCASE_VALUE_FROM_BUFFER(state, headers, key, pos, len) { \
   VALUE value = BUFFER_STR_DOWNCASE(state, pos, len); \
+  rb_hash_aset(headers, key, value); \
+  RB_GC_GUARD(value); \
+}
+
+#define SET_HEADER_UPCASE_VALUE_FROM_BUFFER(state, headers, key, pos, len) { \
+  VALUE value = BUFFER_STR_UPCASE(state, pos, len); \
   rb_hash_aset(headers, key, value); \
   RB_GC_GUARD(value); \
 }
@@ -335,7 +344,7 @@ static inline int parse_method(struct parser_state *state, VALUE headers) {
     }
   }
 done:
-  SET_HEADER_DOWNCASE_VALUE_FROM_BUFFER(state, headers, STR_pseudo_method, pos, len);
+  SET_HEADER_UPCASE_VALUE_FROM_BUFFER(state, headers, STR_pseudo_method, pos, len);
   return 1;
 bad_request:
   RAISE_BAD_REQUEST("Invalid method");
@@ -834,6 +843,7 @@ void Init_H1P() {
   ID_read                   = rb_intern("read");
   ID_readpartial            = rb_intern("readpartial");
   ID_to_i                   = rb_intern("to_i");
+  ID_upcase                 = rb_intern("upcase");
 
   NUM_max_headers_read_length = INT2NUM(MAX_HEADERS_READ_LENGTH);
   NUM_buffer_start = INT2NUM(0);
