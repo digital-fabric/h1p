@@ -5,7 +5,6 @@ require 'bundler/setup'
 require 'fileutils'
 
 require 'minitest/autorun'
-require 'minitest/reporters'
 
 module Minitest::Assertions
   def assert_in_range exp_range, act

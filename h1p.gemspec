@@ -19,7 +19,6 @@ Gem::Specification.new do |s|
   s.required_ruby_version = '>= 2.6'
 
   s.add_development_dependency  'rake-compiler',        '1.1.1'
-  s.add_development_dependency  'rake',               '~>12.3.3'
-  s.add_development_dependency  'minitest',           '~>5.11.3'
-  s.add_development_dependency  'minitest-reporters', '~>1.4.2'
+  s.add_development_dependency  'rake',               '~>13.0.6'
+  s.add_development_dependency  'minitest',           '~>5.14.4'
 end
