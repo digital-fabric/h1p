@@ -64,9 +64,10 @@ The `#parse_headers` method returns a single hash containing the different HTTP
 headers. In case the client has closed the connection, `#parse_headers` will
 return `nil` (see the guard clause above).
 
-The headers hash contains the following "pseudo-headers":
+In addition to the header keys and values, the resulting hash also contains the
+following "pseudo-headers":
 
-- `:method`: the HTTP method (in lower case)
+- `:method`: the HTTP method (in upper case)
 - `:path`: the request target
 - `:protocol`: the protocol used (either `'http/1.0'` or `'http/1.1'`)
 - `:rx`: the total bytes read by the parser
@@ -145,7 +146,7 @@ end
 The `#read_body` and `#read_body_chunk` methods will return `nil` if no body is
 expected (based on the received headers).
 
-## Parsing from different transports
+## Parsing from arbitrary transports
 
 The H1P parser was built to read from any arbitrary transport or source, as long
 as they conform to one of two alternative interfaces:
@@ -162,12 +163,13 @@ as they conform to one of two alternative interfaces:
 - An object implementing a `call` method, such as a `Proc` or any other. The
   call is given a single argument signifying the maximum number of bytes to
   read, and is expected to return either a string with the read data, or `nil`
-  if no more data is available. Here's an example for parsing from a callable:
+  if no more data is available. The callable can be passed as an argument or as
+  a block. Here's an example for parsing from a callable:
 
   ```ruby
   data = ['GET ', '/foo', " HTTP/1.1\r\n", "\r\n"]
   data = ['GET ', '/foo', " HTTP/1.1\r\n", "\r\n"]
-  parser = H1P::Parser.new(proc { data.shift })
+  parser = H1P::Parser.new { data.shift }
   parser.parse_headers
   #=> {":method"=>"get", ":path"=>"/foo", ":protocol"=>"http/1.1", ":rx"=>21}
   ```
@@ -187,20 +189,22 @@ data to the parser, the parser itself reads data from its source whenever it
 needs more of it. If no data is yet available, the parser blocks until more data
 is received.
 
+The different parts of the request are parsed one byte at a time, and once each
+token is considered complete, it is copied from the buffer into a new string, to
+be stored in the headers hash.
+
 ## Performance
 
 The included benchmark (against
-[http_parser.rb](https://github.com/tmm1/http_parser.rb), based on the [node.js
-HTTP parser](https://github.com/nodejs/llhttp)) shows the H1P parser to be about
-10-15% slower than http_parser.rb.
+[http_parser.rb](https://github.com/tmm1/http_parser.rb), based on the *old*
+[node.js HTTP parser](https://github.com/nodejs/http-parser)) shows the H1P
+parser to be about 10-20% slower than http_parser.rb.
 
 However, in a fiber-based environment such as
 [Polyphony](https://github.com/digital-fabric/polyphony), H1P is slightly
 faster, as the overhead of dealing with pipelined requests (which will cause
-callbacks to be triggered multiple times) will significantly affect the
-processing time.
-
-I do intend to work on further improving H1P's performance characteristics.
+`http_parser.rb` to emit callbacks multiple times) significantly affects its
+performance.
 
 ## Roadmap
 
@@ -208,6 +212,8 @@ Here are some of the features and enhancements planned for H1P:
 
 - Add conformance and security tests
 - Add ability to parse HTTP/1 responses (for implementing HTTP clients)
+- Add ability to splice the request body into an arbitrary fd
+  (Polyphony-specific)
 - Improve performance
 
 ## Contributing
