@@ -1,5 +1,9 @@
 ## 0.42 2021-08-16
 
+## 0.2 2021-08-20
+
+- Use uppercase for HTTP method
+
 ## 0.1 2021-08-19
 
 - Import code from Tipi
