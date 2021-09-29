@@ -101,7 +101,7 @@ where the value is an array containing the corresponding values. For example,
 multiple `Cookie` headers will appear in the hash as a single `"cookie"` entry,
 e.g. `{ "cookie" => ['a=1', 'b=2'] }`
 
-### Handling of invalid requests 
+### Handling of invalid requests
 
 When an invalid request is encountered, the parser will raise a `H1P::Error`
 exception. An incoming request may be considered invalid if an invalid character

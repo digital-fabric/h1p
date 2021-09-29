@@ -272,9 +272,9 @@ static inline VALUE parser_io_read(Parser_t *parser, VALUE maxlen, VALUE buf, VA
       return rb_funcall(mPolyphony, ID_backend_read, 5, parser->io, buf, maxlen, Qfalse, buf_pos);
     case method_backend_recv:
       return rb_funcall(mPolyphony, ID_backend_recv, 4, parser->io, buf, maxlen, buf_pos);
-    case method_readpartial:    
+    case method_readpartial:
       return rb_funcall(parser->    io, ID_readpartial, 4, maxlen, buf, buf_pos, Qfalse);
-    case method_call:   
+    case method_call:
       return io_call(parser    ->io, maxlen, buf, buf_pos);
     case method_stock_readpartial:
       return io_stock_readpartial(parser->io, maxlen, buf, buf_pos);
@@ -291,7 +291,7 @@ static inline int fill_buffer(Parser_t *parser) {
   int len = RSTRING_LEN(parser->buffer);
   int read_bytes = len - parser->buf_len;
   if (!read_bytes) return 0;
-  
+
   parser->buf_ptr = RSTRING_PTR(parser->buffer);
   parser->buf_len = len;
   return read_bytes;
@@ -303,8 +303,8 @@ static inline void buffer_trim(Parser_t *parser) {
   int left = len - pos;
 
   // The buffer is trimmed only if length and position thresholds are passed,
-  // *and* position is past the halfway point. 
-  if (len < BUFFER_TRIM_MIN_LEN || 
+  // *and* position is past the halfway point.
+  if (len < BUFFER_TRIM_MIN_LEN ||
       pos < BUFFER_TRIM_MIN_POS ||
       left >= pos) return;
 
@@ -612,7 +612,7 @@ VALUE read_body_with_content_length(Parser_t *parser, int read_entire_body, int 
     len = 0;
   }
   if (buffered_only) return body;
-  
+
   while (parser->body_left) {
     int maxlen = parser->body_left <= MAX_BODY_READ_LENGTH ? parser->body_left : MAX_BODY_READ_LENGTH;
     VALUE tmp_buf = parser_io_read(parser, INT2NUM(maxlen), Qnil, NUM_buffer_start);
@@ -744,7 +744,7 @@ VALUE read_body_with_chunked_encoding(Parser_t *parser, int read_entire_body, in
     int chunk_size = 0;
     if (BUFFER_POS(parser) == BUFFER_LEN(parser)) FILL_BUFFER_OR_GOTO_EOF(parser);
     if (!parse_chunk_size(parser, &chunk_size)) goto bad_request;
-    
+
     if (chunk_size) {
       if (!read_body_chunk_with_chunked_encoding(parser, &body, chunk_size, buffered_only)) goto bad_request;
     }
@@ -772,7 +772,7 @@ static inline void detect_body_read_mode(Parser_t *parser) {
     parser->request_completed = 0;
     return;
   }
-  
+
   VALUE transfer_encoding = rb_hash_aref(parser->headers, STR_transfer_encoding);
   if (chunked_encoding_p(transfer_encoding)) {
     parser->body_read_mode = BODY_READ_MODE_CHUNKED;

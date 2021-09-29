@@ -16,7 +16,7 @@ def handle_client(conn)
       break unless headers
 
       req_body = parser.read_body
-      
+
       p headers: headers
       p body: req_body
 

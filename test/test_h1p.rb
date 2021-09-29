@@ -75,7 +75,7 @@ class H1PTest < MiniTest::Test
     @o.close
 
     assert_raises(Error) { @parser.parse_headers }
-  
+
     max_length = H1P_LIMITS[:max_method_length]
 
     reset_parser
@@ -96,7 +96,7 @@ class H1PTest < MiniTest::Test
   def test_bad_path
     @o << "GET HTTP/1.1\r\n\r\n"
     assert_raises(Error) { @parser.parse_headers }
-  
+
     max_length = H1P_LIMITS[:max_path_length]
 
     reset_parser
@@ -156,19 +156,19 @@ class H1PTest < MiniTest::Test
   def test_headers_eof
     @o << "GET / HTTP/1.1\r\na"
     @o.close
-    
+
     assert_nil @parser.parse_headers
 
     reset_parser
     @o << "GET / HTTP/1.1\r\na:"
     @o.close
-    
+
     assert_nil @parser.parse_headers
 
     reset_parser
     @o << "GET / HTTP/1.1\r\na:      "
     @o.close
-    
+
     assert_nil @parser.parse_headers
   end
 
@@ -324,7 +324,7 @@ class H1PTest < MiniTest::Test
       msg = "0\r\n\r\n"
       @o << msg
       total_sent += msg.bytesize
-    end 
+    end
     headers = @parser.parse_headers
     assert_equal 'chunked', headers['transfer-encoding']
 
@@ -350,7 +350,7 @@ class H1PTest < MiniTest::Test
       msg = "0\r\n\r\n"
       @o << msg
       total_sent += msg.bytesize
-    end 
+    end
     headers = @parser.parse_headers
     assert_equal 'chunked', headers['transfer-encoding']
 
@@ -380,7 +380,7 @@ class H1PTest < MiniTest::Test
       chunk = ' '.to_s * rand(40000..360000)
       @o << "#{chunk.bytesize.to_s(16)}\r\n#{chunk}\r\n"
       @o.close
-    end 
+    end
     headers = @parser.parse_headers
     assert_raises(H1P::Error) { @parser.read_body }
 
@@ -391,7 +391,7 @@ class H1PTest < MiniTest::Test
       chunk = ' '.to_s * rand(40000..360000)
       @o << "-#{chunk.bytesize.to_s(16)}\r\n#{chunk}\r\n"
       @o.close
-    end 
+    end
     headers = @parser.parse_headers
     assert_raises(H1P::Error) { @parser.read_body }
   end
@@ -433,7 +433,7 @@ class H1PTest < MiniTest::Test
       chunk = ' '.to_s * rand(20..1600)
       @o << "-#{chunk.bytesize.to_s(16)}\r\n#{chunk}\r\n"
       @o.close
-    end 
+    end
     headers = @parser.parse_headers
     assert_raises(H1P::Error) { @parser.read_body_chunk(false) }
 
