@@ -1,7 +1,7 @@
 # H1P - a blocking HTTP/1 parser for Ruby
 
 [![Gem Version](https://badge.fury.io/rb/h1p.svg)](http://rubygems.org/gems/h1p)
-[![Modulation Test](https://github.com/digital-fabric/h1p/workflows/Tests/badge.svg)](https://github.com/digital-fabric/h1p/actions?query=workflow%3ATests)
+[![H1P Test](https://github.com/digital-fabric/h1p/workflows/Tests/badge.svg)](https://github.com/digital-fabric/h1p/actions?query=workflow%3ATests)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/digital-fabric/h1p/blob/master/LICENSE)
 
 H1P is a blocking/synchronous HTTP/1 parser for Ruby with a simple and intuitive
