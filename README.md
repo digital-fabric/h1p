@@ -23,6 +23,7 @@ The H1P was originally written as part of
 - Simple, blocking/synchronous API
 - Zero dependencies
 - Transport-agnostic
+- Parses both HTTP request and HTTP response
 - Support for chunked encoding
 - Support for both `LF` and `CRLF` line breaks
 - Track total incoming traffic
@@ -41,15 +42,21 @@ You can then run `bundle install` to install it. Otherwise, just run `gem instal
 
 ## Usage
 
-Start by creating an instance of H1P::Parser, passing a connection instance:
+Start by creating an instance of `H1P::Parser`, passing a connection instance and the parsing mode:
 
 ```ruby
 require 'h1p'
 
-parser = H1P::Parser.new(conn)
+parser = H1P::Parser.new(conn, :server)
 ```
 
-To read the next request from the connection, call `#parse_headers`:
+In order to parse HTTP responses, change the mode to `:client`:
+
+```ruby
+parser = H1P::Parser.new(conn, :client)
+```
+
+To read the next message from the connection, call `#parse_headers`:
 
 ```ruby
 loop do
@@ -65,12 +72,20 @@ headers. In case the client has closed the connection, `#parse_headers` will
 return `nil` (see the guard clause above).
 
 In addition to the header keys and values, the resulting hash also contains the
-following "pseudo-headers":
+following "pseudo-headers" (in server mode):
 
 - `:method`: the HTTP method (in upper case)
 - `:path`: the request target
 - `:protocol`: the protocol used (either `'http/1.0'` or `'http/1.1'`)
 - `:rx`: the total bytes read by the parser
+
+In client mode, the following pseudo-headers will be present:
+
+- `:protocol`: the protocol used (either `'http/1.0'` or `'http/1.1'`)
+- `:status': the HTTP status as an integer
+- `:status_message`: the HTTP status message
+- `:rx`: the total bytes read by the parser
+
 
 The header keys are always lower-cased. Consider the following HTTP request:
 
@@ -101,24 +116,24 @@ where the value is an array containing the corresponding values. For example,
 multiple `Cookie` headers will appear in the hash as a single `"cookie"` entry,
 e.g. `{ "cookie" => ['a=1', 'b=2'] }`
 
-### Handling of invalid requests
+### Handling of invalid message
 
-When an invalid request is encountered, the parser will raise a `H1P::Error`
-exception. An incoming request may be considered invalid if an invalid character
-has been encountered at any point in parsing the request, or if any of the
+When an invalid message is encountered, the parser will raise a `H1P::Error`
+exception. An incoming message may be considered invalid if an invalid character
+has been encountered at any point in parsing the message, or if any of the
 tokens have an invalid length. You can consult the limits used by the parser
 [here](https://github.com/digital-fabric/h1p/blob/main/ext/h1p/limits.rb).
 
-### Reading the request body
+### Reading the message body
 
-To read the request body use `#read_body`:
+To read the message body use `#read_body`:
 
 ```ruby
 # read entire body
 body = parser.read_body
 ```
 
-The H1P parser knows how to read both request bodies with a specified
+The H1P parser knows how to read both message bodies with a specified
 `Content-Length` and request bodies in chunked encoding. The method call will
 return when the entire body has been read. If the body is incomplete or has
 invalid formatting, the parser will raise a `H1P::Error` exception.
@@ -211,8 +226,7 @@ performance.
 Here are some of the features and enhancements planned for H1P:
 
 - Add conformance and security tests
-- Add ability to parse HTTP/1 responses (for implementing HTTP clients)
-- Add ability to splice the request body into an arbitrary fd
+- Add ability to splice the message body into an arbitrary fd
   (Polyphony-specific)
 - Improve performance
 

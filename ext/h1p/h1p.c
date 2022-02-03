@@ -37,6 +37,8 @@ VALUE STR_pseudo_method;
 VALUE STR_pseudo_path;
 VALUE STR_pseudo_protocol;
 VALUE STR_pseudo_rx;
+VALUE STR_pseudo_status;
+VALUE STR_pseudo_status_message;
 
 VALUE STR_chunked;
 VALUE STR_content_length;
@@ -46,6 +48,9 @@ VALUE SYM_backend_read;
 VALUE SYM_backend_recv;
 VALUE SYM_stock_readpartial;
 
+VALUE SYM_client;
+VALUE SYM_server;
+
 enum read_method {
   method_readpartial,       // receiver.readpartial(len, buf, pos, raise_on_eof: false) (Polyphony-specific)
   method_backend_read,      // Polyphony.backend_read (Polyphony-specific)
@@ -54,7 +59,13 @@ enum read_method {
   method_stock_readpartial  // receiver.readpartial(len)
 };
 
+enum parser_mode {
+  mode_server,
+  mode_client
+};
+
 typedef struct parser {
+  enum  parser_mode mode;
   VALUE io;
   VALUE buffer;
   VALUE headers;
@@ -129,10 +140,18 @@ enum read_method detect_read_method(VALUE io) {
     rb_raise(rb_eRuntimeError, "Provided reader should be a callable or respond to #__parser_read_method__");
 }
 
-VALUE Parser_initialize(VALUE self, VALUE io) {
+enum parser_mode parse_parser_mode(VALUE mode) {
+  if (mode == SYM_server) return mode_server;
+  if (mode == SYM_client) return mode_client;
+
+  rb_raise(rb_eRuntimeError, "Invalid parser mode specified");
+}
+
+VALUE Parser_initialize(VALUE self, VALUE io, VALUE mode) {
   Parser_t *parser;
   GetParser(self, parser);
 
+  parser->mode = parse_parser_mode(mode);
   parser->io = io;
   parser->buffer = rb_str_new_literal("");
   parser->headers = Qnil;
@@ -226,6 +245,10 @@ VALUE Parser_initialize(VALUE self, VALUE io) {
   RB_GC_GUARD(value); \
 }
 
+#define SET_HEADER_VALUE_INT(parser, key, value) { \
+  rb_hash_aset(parser->headers, key, INT2NUM(value)); \
+}
+
 #define CONSUME_CRLF(parser) { \
   INC_BUFFER_POS(parser); \
   if (BUFFER_CUR(parser) != '\n') goto bad_request; \
@@ -239,6 +262,9 @@ VALUE Parser_initialize(VALUE self, VALUE io) {
 }
 
 #define GLOBAL_STR(v, s) v = rb_str_new_literal(s); rb_global_variable(&v); rb_obj_freeze(v)
+
+// case-insensitive compare
+#define CMP_CI(parser, down, up) ((BUFFER_CUR(parser) == down) || (BUFFER_CUR(parser) == up))
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -325,7 +351,7 @@ static inline void str_append_from_buffer(VALUE str, char *ptr, int len) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static inline int parse_method(Parser_t *parser) {
+static inline int parse_request_line_method(Parser_t *parser) {
   int pos = BUFFER_POS(parser);
   int len = 0;
 
@@ -354,7 +380,7 @@ eof:
   return 0;
 }
 
-static int parse_request_target(Parser_t *parser) {
+static int parse_request_line_target(Parser_t *parser) {
   while (BUFFER_CUR(parser) == ' ') INC_BUFFER_POS(parser);
   int pos = BUFFER_POS(parser);
   int len = 0;
@@ -383,10 +409,7 @@ eof:
   return 0;
 }
 
-// case-insensitive compare
-#define CMP_CI(parser, down, up) ((BUFFER_CUR(parser) == down) || (BUFFER_CUR(parser) == up))
-
-static int parse_protocol(Parser_t *parser) {
+static int parse_request_line_protocol(Parser_t *parser) {
   while (BUFFER_CUR(parser) == ' ') INC_BUFFER_POS(parser);
   int pos = BUFFER_POS(parser);
   int len = 0;
@@ -430,9 +453,120 @@ eof:
 }
 
 static inline int parse_request_line(Parser_t *parser) {
-  if (!parse_method(parser)) goto eof;
-  if (!parse_request_target(parser)) goto eof;
-  if (!parse_protocol(parser)) goto eof;
+  if (!parse_request_line_method(parser)) goto eof;
+  if (!parse_request_line_target(parser)) goto eof;
+  if (!parse_request_line_protocol(parser)) goto eof;
+
+  return 1;
+eof:
+  return 0;
+}
+
+static inline int parse_status_line_protocol(Parser_t *parser) {
+  int pos = BUFFER_POS(parser);
+  int len = 0;
+
+  if (CMP_CI(parser, 'H', 'h')) INC_BUFFER_POS(parser) else goto bad_request;
+  if (CMP_CI(parser, 'T', 't')) INC_BUFFER_POS(parser) else goto bad_request;
+  if (CMP_CI(parser, 'T', 't')) INC_BUFFER_POS(parser) else goto bad_request;
+  if (CMP_CI(parser, 'P', 'p')) INC_BUFFER_POS(parser) else goto bad_request;
+  if (BUFFER_CUR(parser) == '/') INC_BUFFER_POS(parser) else goto bad_request;
+  if (BUFFER_CUR(parser) == '1') INC_BUFFER_POS(parser) else goto bad_request;
+  len = 6;
+  while (1) {
+    switch (BUFFER_CUR(parser)) {
+      case '.':
+        INC_BUFFER_POS(parser);
+        char c = BUFFER_CUR(parser);
+        if (c == '0' || c == '1') {
+          INC_BUFFER_POS(parser);
+          len += 2;
+          continue;
+        }
+        goto bad_request;
+      case ' ':
+        INC_BUFFER_POS(parser);
+        goto done;
+      default:
+        goto bad_request;
+    }
+  }
+done:
+  if (len < 6 || len > 8) goto bad_request;
+  SET_HEADER_DOWNCASE_VALUE_FROM_BUFFER(parser, STR_pseudo_protocol, pos, len);
+  return 1;
+bad_request:
+  RAISE_BAD_REQUEST("Invalid protocol");
+eof:
+  return 0;
+}
+
+static inline int parse_status_line_status(Parser_t *parser) {
+  while (BUFFER_CUR(parser) == ' ') INC_BUFFER_POS(parser);
+  int len = 0;
+  int status = 0;
+  while (1) {
+    if (len > 4) goto bad_request;
+    
+    char c = BUFFER_CUR(parser);
+    if (c >= '0' && c <= '9') {
+      status = status * 10 + (c - '0');
+      len += 1;
+      INC_BUFFER_POS(parser);
+      continue;
+    }
+    switch (c) {
+      case ' ':
+        INC_BUFFER_POS(parser);
+        goto done;
+      case '\r':
+      case '\n':
+        goto done;
+      default:
+        goto bad_request;
+    }
+  }
+done:
+  SET_HEADER_VALUE_INT(parser, STR_pseudo_status, status);
+  return 1;
+bad_request:
+  RAISE_BAD_REQUEST("Invalid response status");
+eof:
+  return 0;
+}
+
+static inline int parse_status_line_status_message(Parser_t *parser) {
+  while (BUFFER_CUR(parser) == ' ') INC_BUFFER_POS(parser);
+  int pos = BUFFER_POS(parser);
+  int len = 0;
+  while (1) {
+    switch (BUFFER_CUR(parser)) {
+      case '\r':
+        CONSUME_CRLF(parser);
+        goto done;
+      case '\n':
+        INC_BUFFER_POS(parser);
+        goto done;
+      default:
+        INC_BUFFER_POS(parser);
+        len++;
+        if (len > MAX_STATUS_MESSAGE_LENGTH) goto bad_request;
+    }
+  }
+done:
+  SET_HEADER_VALUE_FROM_BUFFER(parser, STR_pseudo_status_message, pos, len);
+  return 1;
+bad_request:
+  RAISE_BAD_REQUEST("Invalid request target");
+eof:
+  return 0;
+}
+
+
+static inline int parse_status_line(Parser_t *parser) {
+  if (!parse_status_line_protocol(parser)) goto eof;
+  if (!parse_status_line_status(parser)) goto eof;
+  if (!parse_status_line_status_message(parser)) goto eof;
 
   return 1;
 eof:
@@ -547,7 +681,12 @@ VALUE Parser_parse_headers(VALUE self) {
   INIT_PARSER_STATE(parser);
   parser->current_request_rx = 0;
 
-  if (!parse_request_line(parser)) goto eof;
+  if (parser->mode == mode_server) {
+    if (!parse_request_line(parser)) goto eof;
+  }
+  else {
+    if (!parse_status_line(parser)) goto eof;
+  }
 
   int header_count = 0;
   while (1) {
@@ -730,7 +869,7 @@ done:
   parser->current_request_rx += BUFFER_POS(parser) - initial_pos;
   return 1;
 bad_request:
-  RAISE_BAD_REQUEST("Invalid protocol");
+  RAISE_BAD_REQUEST("Invalid chunk");
 eof:
   return 0;
 }
@@ -826,7 +965,7 @@ void Init_H1P() {
   rb_gc_register_mark_object(cError);
 
   // backend methods
-  rb_define_method(cParser, "initialize", Parser_initialize, 1);
+  rb_define_method(cParser, "initialize", Parser_initialize, 2);
   rb_define_method(cParser, "parse_headers", Parser_parse_headers, 0);
   rb_define_method(cParser, "read_body", Parser_read_body, 0);
   rb_define_method(cParser, "read_body_chunk", Parser_read_body_chunk, 1);
@@ -849,18 +988,23 @@ void Init_H1P() {
   NUM_buffer_start = INT2NUM(0);
   NUM_buffer_end = INT2NUM(-1);
 
-  GLOBAL_STR(STR_pseudo_method,       ":method");
-  GLOBAL_STR(STR_pseudo_path,         ":path");
-  GLOBAL_STR(STR_pseudo_protocol,     ":protocol");
-  GLOBAL_STR(STR_pseudo_rx,           ":rx");
+  GLOBAL_STR(STR_pseudo_method,         ":method");
+  GLOBAL_STR(STR_pseudo_path,           ":path");
+  GLOBAL_STR(STR_pseudo_protocol,       ":protocol");
+  GLOBAL_STR(STR_pseudo_rx,             ":rx");
+  GLOBAL_STR(STR_pseudo_status,         ":status");
+  GLOBAL_STR(STR_pseudo_status_message, ":status_message");
 
-  GLOBAL_STR(STR_chunked,             "chunked");
-  GLOBAL_STR(STR_content_length,      "content-length");
-  GLOBAL_STR(STR_transfer_encoding,   "transfer-encoding");
+  GLOBAL_STR(STR_chunked,               "chunked");
+  GLOBAL_STR(STR_content_length,        "content-length");
+  GLOBAL_STR(STR_transfer_encoding,     "transfer-encoding");
 
   SYM_backend_read = ID2SYM(ID_backend_read);
   SYM_backend_recv = ID2SYM(ID_backend_recv);
   SYM_stock_readpartial = ID2SYM(rb_intern("stock_readpartial"));
+  
+  SYM_client = ID2SYM(rb_intern("client"));
+  SYM_server = ID2SYM(rb_intern("server"));
 
   rb_global_variable(&mH1P);
 }

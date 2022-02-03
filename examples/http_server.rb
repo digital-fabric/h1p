@@ -10,7 +10,7 @@ trap('SIGINT') { exit! }
 
 def handle_client(conn)
   Thread.new do
-    parser = H1P::Parser.new(conn)
+    parser = H1P::Parser.new(conn, :server)
     loop do
       headers = parser.parse_headers
       break unless headers
