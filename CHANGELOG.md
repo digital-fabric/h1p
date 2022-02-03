@@ -1,3 +1,5 @@
+## 0.3 2022-02-03
+
 - Add support for parsing HTTP responses (#1)
 - Put state directly in parser struct
 
