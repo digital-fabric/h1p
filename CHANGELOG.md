@@ -1,3 +1,7 @@
+## 0.4 2022-02-28
+
+- Rename `__parser_read_method__` to `__read_method__`
+
 ## 0.3 2022-02-03
 
 - Add support for parsing HTTP responses (#1)
