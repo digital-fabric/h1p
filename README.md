@@ -166,7 +166,7 @@ expected (based on the received headers).
 The H1P parser was built to read from any arbitrary transport or source, as long
 as they conform to one of two alternative interfaces:
 
-- An object implementing a `__parser_read_method__` method, which returns any of
+- An object implementing a `__read_method__` method, which returns any of
   the following values:
 
   - `:stock_readpartial` - to be used for instances of `IO`, `Socket`,

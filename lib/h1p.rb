@@ -4,7 +4,7 @@ require_relative './h1p_ext'
 
 unless Object.const_defined?('Polyphony')
   class IO
-    def __parser_read_method__
+    def __read_method__
       :stock_readpartial
     end
   end
@@ -12,19 +12,19 @@ unless Object.const_defined?('Polyphony')
   require 'socket'
 
   class Socket
-    def __parser_read_method__
+    def __read_method__
       :stock_readpartial
     end
   end
 
   class TCPSocket
-    def __parser_read_method__
+    def __read_method__
       :stock_readpartial
     end
   end
 
   class UNIXSocket
-    def __parser_read_method__
+    def __read_method__
       :stock_readpartial
     end
   end

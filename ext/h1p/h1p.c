@@ -20,7 +20,7 @@ ID ID_call;
 ID ID_downcase;
 ID ID_eof_p;
 ID ID_eq;
-ID ID_parser_read_method;
+ID ID_read_method;
 ID ID_read;
 ID ID_readpartial;
 ID ID_to_i;
@@ -123,8 +123,8 @@ static inline void get_polyphony() {
 }
 
 enum read_method detect_read_method(VALUE io) {
-  if (rb_respond_to(io, ID_parser_read_method)) {
-    VALUE method = rb_funcall(io, ID_parser_read_method, 0);
+  if (rb_respond_to(io, ID_read_method)) {
+    VALUE method = rb_funcall(io, ID_read_method, 0);
     if (method == SYM_stock_readpartial) return method_stock_readpartial;
 
     get_polyphony();
@@ -137,7 +137,7 @@ enum read_method detect_read_method(VALUE io) {
     return method_call;
   }
   else
-    rb_raise(rb_eRuntimeError, "Provided reader should be a callable or respond to #__parser_read_method__");
+    rb_raise(rb_eRuntimeError, "Provided reader should be a callable or respond to #__read_method__");
 }
 
 enum parser_mode parse_parser_mode(VALUE mode) {
@@ -978,7 +978,7 @@ void Init_H1P() {
   ID_downcase               = rb_intern("downcase");
   ID_eof_p                  = rb_intern("eof?");
   ID_eq                     = rb_intern("==");
-  ID_parser_read_method     = rb_intern("__parser_read_method__");
+  ID_read_method     = rb_intern("__read_method__");
   ID_read                   = rb_intern("read");
   ID_readpartial            = rb_intern("readpartial");
   ID_to_i                   = rb_intern("to_i");
