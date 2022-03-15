@@ -122,7 +122,7 @@ static inline void get_polyphony() {
   rb_gc_register_mark_object(mPolyphony);
 }
 
-enum read_method detect_read_method(VALUE io) {
+static enum read_method detect_read_method(VALUE io) {
   if (rb_respond_to(io, ID_read_method)) {
     VALUE method = rb_funcall(io, ID_read_method, 0);
     if (method == SYM_stock_readpartial) return method_stock_readpartial;
