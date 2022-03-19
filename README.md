@@ -26,6 +26,8 @@ The H1P was originally written as part of
 - Parses both HTTP request and HTTP response
 - Support for chunked encoding
 - Support for both `LF` and `CRLF` line breaks
+- Support for **splicing** request/response bodies (when used with
+  [Polyphony](https://github.com/digital-fabric/polyphony))
 - Track total incoming traffic
 
 ## Installing
@@ -160,6 +162,36 @@ end
 
 The `#read_body` and `#read_body_chunk` methods will return `nil` if no body is
 expected (based on the received headers).
+
+## Splicing request/response bodies
+
+> Splicing of request/response bodies is available only on Linux, and works only
+> with [Polyphony](https://github.com/digital-fabric/polyphony).
+
+H1P also lets you [splice](https://man7.org/linux/man-pages/man2/splice.2.html)
+request or response bodies directly to a pipe. This is particularly useful for
+uploading or downloading large files, as the data does not need to be loaded
+into Ruby strings. In fact, the data will stay almost entirely in kernel
+buffers, which means any data copying is reduced to the absolute minimum.
+
+The following example sends a request, then splices the response body to a file:
+
+```ruby
+require 'polyphony'
+require 'h1p'
+
+socket = TCPSocket.new('example.com', 80)
+socket << "GET /bigfile HTTP/1.1\r\nHost: example.com\r\n\r\n"
+
+parser = H1P::Parser.new(socket, :client)
+headers = parser.parse_headers
+
+pipe = Polyphony.pipe
+File.open('bigfile', 'w+') do |f|
+  spin { parser.splice_body_to(pipe) }
+  f.splice_from(pipe)
+end
+```
 
 ## Parsing from arbitrary transports
 

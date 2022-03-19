@@ -1,3 +1,7 @@
+## 0.5 2022-03-19
+
+- Implement `Parser#splice_body_to` (#3)
+
 ## 0.4 2022-02-28
 
 - Rename `__parser_read_method__` to `__read_method__`
