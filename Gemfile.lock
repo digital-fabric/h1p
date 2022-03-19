@@ -1,9 +1,4 @@
 PATH
-  remote: ../polyphony
-  specs:
-    polyphony (0.88)
-
-PATH
   remote: .
   specs:
     h1p (0.4)
@@ -22,7 +17,6 @@ PLATFORMS
 DEPENDENCIES
   h1p!
   minitest (~> 5.14.4)
-  polyphony!
   rake (~> 13.0.6)
   rake-compiler (= 1.1.1)
 

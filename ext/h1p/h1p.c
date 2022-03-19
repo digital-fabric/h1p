@@ -993,7 +993,34 @@ done:
 }
 
 void splice_body_with_content_length(Parser_t *parser, VALUE dest, enum write_method method)  {
-  rb_raise(rb_eRuntimeError, "Not implemented");
+  if (parser->body_left <= 0) return;
+
+  int len = RSTRING_LEN(parser->buffer);
+  int pos = BUFFER_POS(parser);
+
+  if (pos < len) {
+    int available = len - pos;
+    if (available > parser->body_left) available = parser->body_left;
+    VALUE buf = rb_str_new(RSTRING_PTR(parser->buffer) + pos, available);
+    BUFFER_POS(parser) += available;
+    parser_io_write(dest, buf, method);
+    RB_GC_GUARD(buf);
+    parser->current_request_rx += available;
+    parser->body_left -= available;
+    if (!parser->body_left) parser->request_completed = 1;
+  }
+
+  while (parser->body_left) {
+    int spliced = parser_io_splice(parser->io, dest, parser->body_left);
+    if (!spliced) goto eof;
+    parser->current_request_rx += spliced;
+    parser->body_left -= spliced;
+  }
+done:
+  rb_hash_aset(parser->headers, STR_pseudo_rx, INT2NUM(parser->current_request_rx));
+  return;
+eof:
+  RAISE_BAD_REQUEST("Incomplete body");
 }
 
 static inline void detect_body_read_mode(Parser_t *parser) {
@@ -1025,7 +1052,8 @@ static inline VALUE read_body(VALUE self, int read_entire_body, int buffered_onl
 
   if (parser->body_read_mode == BODY_READ_MODE_CHUNKED)
     return read_body_with_chunked_encoding(parser, read_entire_body, buffered_only);
-  return read_body_with_content_length(parser, read_entire_body, buffered_only);
+  else
+    return read_body_with_content_length(parser, read_entire_body, buffered_only);
 }
 
 VALUE Parser_read_body(VALUE self) {

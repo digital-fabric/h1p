@@ -481,6 +481,26 @@ class H1PRequestTest < MiniTest::Test
     assert_equal req_headers.bytesize + req_body.bytesize + chunk_header_size, headers[':rx']
   end
 
+  def test_splice_body_to_content_length
+    req_body = SecureRandom.alphanumeric(60000)
+    req_headers = "POST / HTTP/1.1\r\nContent-Length: #{req_body.bytesize}\r\n\r\n"
+    r, w = IO.pipe
+
+    Thread.new do
+      @o << req_headers
+      @o << req_body
+      @o.close
+    end
+    def w.__write_method__; :backend_write; end
+    
+    headers = @parser.parse_headers
+    @parser.splice_body_to(w)
+    w.close
+    assert_equal req_body, r.read
+
+    assert_equal req_headers.bytesize + req_body.bytesize, headers[':rx']
+  end
+
   def test_complete?
     @o << "GET / HTTP/1.1\r\n\r\n"
     headers = @parser.parse_headers
