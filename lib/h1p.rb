@@ -2,28 +2,34 @@
 
 require_relative './h1p_ext'
 
-unless Object.const_defined?('Polyphony')
-  class IO
+class ::IO
+  if !method_defined?(:__read_method__)
     def __read_method__
       :stock_readpartial
     end
   end
+end
 
-  require 'socket'
+require 'socket'
 
-  class Socket
+class Socket
+  if !method_defined?(:__read_method__)
     def __read_method__
       :stock_readpartial
     end
   end
+end
 
-  class TCPSocket
+class TCPSocket
+  if !method_defined?(:__read_method__)
     def __read_method__
       :stock_readpartial
     end
   end
+end
 
-  class UNIXSocket
+class UNIXSocket
+  if !method_defined?(:__read_method__)
     def __read_method__
       :stock_readpartial
     end

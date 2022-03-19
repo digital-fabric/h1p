@@ -16,6 +16,9 @@
 ID ID_arity;
 ID ID_backend_read;
 ID ID_backend_recv;
+ID ID_backend_send;
+ID ID_backend_splice;
+ID ID_backend_write;
 ID ID_call;
 ID ID_downcase;
 ID ID_eof_p;
@@ -25,8 +28,8 @@ ID ID_read;
 ID ID_readpartial;
 ID ID_to_i;
 ID ID_upcase;
+ID ID_write_method;
 
-static VALUE mPolyphony = Qnil;
 static VALUE cError;
 
 VALUE NUM_max_headers_read_length;
@@ -46,17 +49,24 @@ VALUE STR_transfer_encoding;
 
 VALUE SYM_backend_read;
 VALUE SYM_backend_recv;
+VALUE SYM_backend_send;
+VALUE SYM_backend_write;
 VALUE SYM_stock_readpartial;
 
 VALUE SYM_client;
 VALUE SYM_server;
 
 enum read_method {
-  method_readpartial,       // receiver.readpartial(len, buf, pos, raise_on_eof: false) (Polyphony-specific)
-  method_backend_read,      // Polyphony.backend_read (Polyphony-specific)
-  method_backend_recv,      // Polyphony.backend_recv (Polyphony-specific)
-  method_call,              // receiver.call(len) (Universal)
-  method_stock_readpartial  // receiver.readpartial(len)
+  RM_READPARTIAL,       // receiver.readpartial(len, buf, pos, raise_on_eof: false) (Polyphony-specific)
+  RM_BACKEND_READ,      // Polyphony.backend_read (Polyphony-specific)
+  RM_BACKEND_RECV,      // Polyphony.backend_recv (Polyphony-specific)
+  RM_CALL,              // receiver.call(len) (Universal)
+  RM_STOCK_READPARTIAL  // receiver.readpartial(len)
+};
+
+enum write_method {
+  WM_BACKEND_WRITE,
+  WM_BACKEND_SEND
 };
 
 enum parser_mode {
@@ -115,29 +125,38 @@ static VALUE Parser_allocate(VALUE klass) {
 #define GetParser(obj, parser) \
   TypedData_Get_Struct((obj), Parser_t, &Parser_type, (parser))
 
-static inline void get_polyphony() {
-  if (mPolyphony != Qnil) return;
-
-  mPolyphony = rb_const_get(rb_cObject, rb_intern("Polyphony"));
-  rb_gc_register_mark_object(mPolyphony);
+static inline VALUE Polyphony() {
+  static VALUE mPolyphony = Qnil;
+  if (mPolyphony == Qnil) {
+    mPolyphony = rb_const_get(rb_cObject, rb_intern("Polyphony"));
+    rb_gc_register_mark_object(mPolyphony);
+  }
+  return mPolyphony;
 }
 
 static enum read_method detect_read_method(VALUE io) {
   if (rb_respond_to(io, ID_read_method)) {
     VALUE method = rb_funcall(io, ID_read_method, 0);
-    if (method == SYM_stock_readpartial) return method_stock_readpartial;
+    if (method == SYM_stock_readpartial) return RM_STOCK_READPARTIAL;
+    if (method == SYM_backend_read)      return RM_BACKEND_READ;
+    if (method == SYM_backend_recv)      return RM_BACKEND_RECV;
 
-    get_polyphony();
-    if (method == SYM_backend_read)      return method_backend_read;
-    if (method == SYM_backend_recv)      return method_backend_recv;
-
-    return method_readpartial;
+    return RM_READPARTIAL;
   }
   else if (rb_respond_to(io, ID_call)) {
-    return method_call;
+    return RM_CALL;
   }
   else
     rb_raise(rb_eRuntimeError, "Provided reader should be a callable or respond to #__read_method__");
+}
+
+static enum write_method detect_write_method(VALUE io) {
+  if (rb_respond_to(io, ID_write_method)) {
+    VALUE method = rb_funcall(io, ID_write_method, 0);
+    if (method == SYM_backend_write)  return WM_BACKEND_WRITE;
+    if (method == SYM_backend_send)   return WM_BACKEND_SEND;
+  }
+  rb_raise(rb_eRuntimeError, "Provided io should respond to #__write_method__");
 }
 
 enum parser_mode parse_parser_mode(VALUE mode) {
@@ -294,19 +313,35 @@ static inline VALUE io_stock_readpartial(VALUE io, VALUE maxlen, VALUE buf, VALU
 
 static inline VALUE parser_io_read(Parser_t *parser, VALUE maxlen, VALUE buf, VALUE buf_pos) {
   switch (parser->read_method) {
-    case method_backend_read:
-      return rb_funcall(mPolyphony, ID_backend_read, 5, parser->io, buf, maxlen, Qfalse, buf_pos);
-    case method_backend_recv:
-      return rb_funcall(mPolyphony, ID_backend_recv, 4, parser->io, buf, maxlen, buf_pos);
-    case method_readpartial:
-      return rb_funcall(parser->    io, ID_readpartial, 4, maxlen, buf, buf_pos, Qfalse);
-    case method_call:
-      return io_call(parser    ->io, maxlen, buf, buf_pos);
-    case method_stock_readpartial:
+    case RM_BACKEND_READ:
+      return rb_funcall(Polyphony(), ID_backend_read, 5, parser->io, buf, maxlen, Qfalse, buf_pos);
+    case RM_BACKEND_RECV:
+      return rb_funcall(Polyphony(), ID_backend_recv, 4, parser->io, buf, maxlen, buf_pos);
+    case RM_READPARTIAL:
+      return rb_funcall(parser->io, ID_readpartial, 4, maxlen, buf, buf_pos, Qfalse);
+    case RM_CALL:
+      return io_call(parser->io, maxlen, buf, buf_pos);
+    case RM_STOCK_READPARTIAL:
       return io_stock_readpartial(parser->io, maxlen, buf, buf_pos);
     default:
       return Qnil;
   }
+}
+
+static inline VALUE parser_io_write(VALUE io, VALUE buf, enum write_method method) {
+  switch (method) {
+    case WM_BACKEND_WRITE:
+      return rb_funcall(Polyphony(), ID_backend_write, 2, io, buf);
+    case WM_BACKEND_SEND:
+      return rb_funcall(Polyphony(), ID_backend_send, 3, io, buf, INT2FIX(0));
+    default:
+      return Qnil;
+  }
+}
+
+static inline int parser_io_splice(VALUE src, VALUE dest, int len) {
+  VALUE ret = rb_funcall(Polyphony(), ID_backend_splice, 3, src, dest, INT2FIX(len));
+  return FIX2INT(ret);
 }
 
 static inline int fill_buffer(Parser_t *parser) {
@@ -852,6 +887,33 @@ eof:
   return 0;
 }
 
+int splice_body_chunk_with_chunked_encoding(Parser_t *parser, VALUE dest, int chunk_size, enum write_method method) {
+  int len = RSTRING_LEN(parser->buffer);
+  int pos = BUFFER_POS(parser);
+  int left = chunk_size;
+
+  if (pos < len) {
+    int available = len - pos;
+    if (available > left) available = left;
+    VALUE buf = rb_str_new(RSTRING_PTR(parser->buffer) + pos, available);
+    BUFFER_POS(parser) += available;
+    parser->current_request_rx += available;
+    parser_io_write(dest, buf, method);
+    RB_GC_GUARD(buf);
+    left -= available;
+  }
+
+  while (left) {
+    int spliced = parser_io_splice(parser->io, dest, left);
+    if (!spliced) goto eof;
+    parser->current_request_rx += spliced;
+    left -= spliced;
+  }
+  return 1;
+eof:
+  return 0;
+}
+
 static inline int parse_chunk_postfix(Parser_t *parser) {
   int initial_pos = BUFFER_POS(parser);
   if (initial_pos == BUFFER_LEN(parser)) FILL_BUFFER_OR_GOTO_EOF(parser);
@@ -902,6 +964,38 @@ done:
   return body;
 }
 
+void splice_body_with_chunked_encoding(Parser_t *parser, VALUE dest, enum write_method method) {
+  buffer_trim(parser);
+  INIT_PARSER_STATE(parser);
+
+  while (1) {
+    int chunk_size = 0;
+    if (BUFFER_POS(parser) == BUFFER_LEN(parser)) FILL_BUFFER_OR_GOTO_EOF(parser);
+    if (!parse_chunk_size(parser, &chunk_size)) goto bad_request;
+
+    if (chunk_size) {
+      if (!splice_body_chunk_with_chunked_encoding(parser, dest, chunk_size, method))
+        goto bad_request;
+    }
+    else
+      parser->request_completed = 1;
+
+    // read post-chunk delimiter ("\r\n")
+    if (!parse_chunk_postfix(parser)) goto bad_request;
+    if (!chunk_size) goto done;
+  }
+bad_request:
+  RAISE_BAD_REQUEST("Malformed request body");
+eof:
+  RAISE_BAD_REQUEST("Incomplete request body");
+done:
+  rb_hash_aset(parser->headers, STR_pseudo_rx, INT2NUM(parser->current_request_rx));
+}
+
+void splice_body_with_content_length(Parser_t *parser, VALUE dest, enum write_method method)  {
+  rb_raise(rb_eRuntimeError, "Not implemented");
+}
+
 static inline void detect_body_read_mode(Parser_t *parser) {
   VALUE content_length = rb_hash_aref(parser->headers, STR_content_length);
   if (content_length != Qnil) {
@@ -942,6 +1036,22 @@ VALUE Parser_read_body_chunk(VALUE self, VALUE buffered_only) {
   return read_body(self, 0, buffered_only == Qtrue);
 }
 
+VALUE Parser_splice_body_to(VALUE self, VALUE dest) {
+  Parser_t *parser;
+  GetParser(self, parser);
+  enum write_method method = detect_write_method(dest);
+
+  if (parser->body_read_mode == BODY_READ_MODE_UNKNOWN)
+    detect_body_read_mode(parser);
+
+  if (parser->body_read_mode == BODY_READ_MODE_CHUNKED)
+    splice_body_with_chunked_encoding(parser, dest, method);
+  else
+    splice_body_with_content_length(parser, dest, method);
+  
+  return self;
+}
+
 VALUE Parser_complete_p(VALUE self) {
   Parser_t *parser;
   GetParser(self, parser);
@@ -969,20 +1079,25 @@ void Init_H1P() {
   rb_define_method(cParser, "parse_headers", Parser_parse_headers, 0);
   rb_define_method(cParser, "read_body", Parser_read_body, 0);
   rb_define_method(cParser, "read_body_chunk", Parser_read_body_chunk, 1);
+  rb_define_method(cParser, "splice_body_to", Parser_splice_body_to, 1);
   rb_define_method(cParser, "complete?", Parser_complete_p, 0);
 
   ID_arity                  = rb_intern("arity");
   ID_backend_read           = rb_intern("backend_read");
   ID_backend_recv           = rb_intern("backend_recv");
+  ID_backend_send           = rb_intern("backend_send");
+  ID_backend_splice         = rb_intern("backend_splice");
+  ID_backend_write          = rb_intern("backend_write");
   ID_call                   = rb_intern("call");
   ID_downcase               = rb_intern("downcase");
   ID_eof_p                  = rb_intern("eof?");
   ID_eq                     = rb_intern("==");
-  ID_read_method     = rb_intern("__read_method__");
+  ID_read_method            = rb_intern("__read_method__");
   ID_read                   = rb_intern("read");
   ID_readpartial            = rb_intern("readpartial");
   ID_to_i                   = rb_intern("to_i");
   ID_upcase                 = rb_intern("upcase");
+  ID_write_method           = rb_intern("__write_method__");
 
   NUM_max_headers_read_length = INT2NUM(MAX_HEADERS_READ_LENGTH);
   NUM_buffer_start = INT2NUM(0);
@@ -999,8 +1114,11 @@ void Init_H1P() {
   GLOBAL_STR(STR_content_length,        "content-length");
   GLOBAL_STR(STR_transfer_encoding,     "transfer-encoding");
 
-  SYM_backend_read = ID2SYM(ID_backend_read);
-  SYM_backend_recv = ID2SYM(ID_backend_recv);
+  SYM_backend_read  = ID2SYM(ID_backend_read);
+  SYM_backend_recv  = ID2SYM(ID_backend_recv);
+  SYM_backend_send  = ID2SYM(ID_backend_send);
+  SYM_backend_write = ID2SYM(ID_backend_write);
+
   SYM_stock_readpartial = ID2SYM(rb_intern("stock_readpartial"));
   
   SYM_client = ID2SYM(rb_intern("client"));

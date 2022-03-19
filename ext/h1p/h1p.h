@@ -14,5 +14,10 @@
   for (unsigned long i = 0; i < size; i++) printf("%s\n", strings[i]); \
   free(strings); \
 }
+#define PRINT_BUFFER(prefix, ptr, len) { \
+  printf("%s buffer (%d): ", prefix, (int)len); \
+  for (int i = 0; i < len; i++) printf("%02X ", ptr[i]); \
+  printf("\n"); \
+}
 
 #endif /* H1P_H */

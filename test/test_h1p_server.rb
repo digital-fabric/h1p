@@ -4,6 +4,7 @@ require_relative 'helper'
 require 'h1p'
 require 'socket'
 require_relative '../ext/h1p/limits'
+require 'securerandom'
 
 class H1PRequestTest < MiniTest::Test
   Error = H1P::Error
@@ -444,6 +445,40 @@ class H1PRequestTest < MiniTest::Test
     @o.close
     headers = @parser.parse_headers
     assert_raises(H1P::Error) { @parser.read_body_chunk(false) }
+  end
+
+  PolyphonyMockup = Object.new
+  def PolyphonyMockup.backend_write(io, buf)
+    io << buf
+  end
+  def PolyphonyMockup.backend_splice(src, dest, len)
+    buf = src.read(len)
+    len = dest.write(buf)
+    len
+  end
+  Object::Polyphony = PolyphonyMockup
+
+  def test_splice_body_to_chunked_encoding
+    req_body = SecureRandom.alphanumeric(60000)
+    req_headers = "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"
+    r, w = IO.pipe
+
+    Thread.new do
+      @o << req_headers
+      @o << "#{req_body.bytesize.to_s(16)}\r\n"
+      @o << req_body
+      @o << "\r\n0\r\n\r\n"
+      @o.close
+    end
+    def w.__write_method__; :backend_write; end
+    
+    headers = @parser.parse_headers
+    @parser.splice_body_to(w)
+    w.close
+    assert_equal req_body, r.read
+
+    chunk_header_size = "#{req_body.bytesize.to_s(16)}\r\n".bytesize + "\r\n0\r\n\r\n".bytesize
+    assert_equal req_headers.bytesize + req_body.bytesize + chunk_header_size, headers[':rx']
   end
 
   def test_complete?
