@@ -265,7 +265,7 @@ VALUE Parser_initialize(VALUE self, VALUE io, VALUE mode) {
 }
 
 #define SET_HEADER_VALUE_INT(parser, key, value) { \
-  rb_hash_aset(parser->headers, key, INT2NUM(value)); \
+  rb_hash_aset(parser->headers, key, INT2FIX(value)); \
 }
 
 #define CONSUME_CRLF(parser) { \
@@ -740,7 +740,7 @@ done:
 
   parser->current_request_rx += read_bytes;
   if (parser->headers != Qnil)
-    rb_hash_aset(parser->headers, STR_pseudo_rx, INT2NUM(read_bytes));
+    rb_hash_aset(parser->headers, STR_pseudo_rx, INT2FIX(read_bytes));
   return parser->headers;
 }
 
@@ -789,7 +789,7 @@ VALUE read_body_with_content_length(Parser_t *parser, int read_entire_body, int 
 
   while (parser->body_left) {
     int maxlen = parser->body_left <= MAX_BODY_READ_LENGTH ? parser->body_left : MAX_BODY_READ_LENGTH;
-    VALUE tmp_buf = parser_io_read(parser, INT2NUM(maxlen), Qnil, NUM_buffer_start);
+    VALUE tmp_buf = parser_io_read(parser, INT2FIX(maxlen), Qnil, NUM_buffer_start);
     if (tmp_buf == Qnil) goto eof;
     if (body != Qnil)
       rb_str_append(body, tmp_buf);
@@ -803,7 +803,7 @@ VALUE read_body_with_content_length(Parser_t *parser, int read_entire_body, int 
     if (!read_entire_body) goto done;
   }
 done:
-  rb_hash_aset(parser->headers, STR_pseudo_rx, INT2NUM(parser->current_request_rx));
+  rb_hash_aset(parser->headers, STR_pseudo_rx, INT2FIX(parser->current_request_rx));
   RB_GC_GUARD(body);
   return body;
 eof:
@@ -871,7 +871,7 @@ int read_body_chunk_with_chunked_encoding(Parser_t *parser, VALUE *body, int chu
   while (left) {
     int maxlen = left <= MAX_BODY_READ_LENGTH ? left : MAX_BODY_READ_LENGTH;
 
-    VALUE tmp_buf = parser_io_read(parser, INT2NUM(maxlen), Qnil, NUM_buffer_start);
+    VALUE tmp_buf = parser_io_read(parser, INT2FIX(maxlen), Qnil, NUM_buffer_start);
     if (tmp_buf == Qnil) goto eof;
     if (*body != Qnil)
       rb_str_append(*body, tmp_buf);
@@ -959,7 +959,7 @@ bad_request:
 eof:
   RAISE_BAD_REQUEST("Incomplete request body");
 done:
-  rb_hash_aset(parser->headers, STR_pseudo_rx, INT2NUM(parser->current_request_rx));
+  rb_hash_aset(parser->headers, STR_pseudo_rx, INT2FIX(parser->current_request_rx));
   RB_GC_GUARD(body);
   return body;
 }
@@ -989,7 +989,7 @@ bad_request:
 eof:
   RAISE_BAD_REQUEST("Incomplete request body");
 done:
-  rb_hash_aset(parser->headers, STR_pseudo_rx, INT2NUM(parser->current_request_rx));
+  rb_hash_aset(parser->headers, STR_pseudo_rx, INT2FIX(parser->current_request_rx));
 }
 
 void splice_body_with_content_length(Parser_t *parser, VALUE dest, enum write_method method)  {
@@ -1017,7 +1017,7 @@ void splice_body_with_content_length(Parser_t *parser, VALUE dest, enum write_me
     parser->body_left -= spliced;
   }
 done:
-  rb_hash_aset(parser->headers, STR_pseudo_rx, INT2NUM(parser->current_request_rx));
+  rb_hash_aset(parser->headers, STR_pseudo_rx, INT2FIX(parser->current_request_rx));
   return;
 eof:
   RAISE_BAD_REQUEST("Incomplete body");
@@ -1127,9 +1127,9 @@ void Init_H1P() {
   ID_upcase                 = rb_intern("upcase");
   ID_write_method           = rb_intern("__write_method__");
 
-  NUM_max_headers_read_length = INT2NUM(MAX_HEADERS_READ_LENGTH);
-  NUM_buffer_start = INT2NUM(0);
-  NUM_buffer_end = INT2NUM(-1);
+  NUM_max_headers_read_length = INT2FIX(MAX_HEADERS_READ_LENGTH);
+  NUM_buffer_start = INT2FIX(0);
+  NUM_buffer_end = INT2FIX(-1);
 
   GLOBAL_STR(STR_pseudo_method,         ":method");
   GLOBAL_STR(STR_pseudo_path,           ":path");
