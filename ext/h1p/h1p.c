@@ -22,14 +22,18 @@ ID ID_call;
 ID ID_downcase;
 ID ID_eof_p;
 ID ID_eq;
+ID ID_iowrite;
 ID ID_read_method;
 ID ID_read;
 ID ID_readpartial;
 ID ID_to_i;
+ID ID_to_s;
 ID ID_upcase;
 ID ID_write_method;
 
 static VALUE cError;
+
+VALUE eArgumentError;
 
 VALUE NUM_max_headers_read_length;
 VALUE NUM_buffer_start;
@@ -38,12 +42,15 @@ VALUE NUM_buffer_end;
 VALUE STR_pseudo_method;
 VALUE STR_pseudo_path;
 VALUE STR_pseudo_protocol;
+VALUE STR_pseudo_protocol_default;
 VALUE STR_pseudo_rx;
 VALUE STR_pseudo_status;
+VALUE STR_pseudo_status_default;
 VALUE STR_pseudo_status_message;
 
 VALUE STR_chunked;
 VALUE STR_content_length;
+VALUE STR_content_length_capitalized;
 VALUE STR_transfer_encoding;
 
 VALUE SYM_backend_read;
@@ -1088,6 +1095,132 @@ VALUE Parser_complete_p(VALUE self) {
   return parser->request_completed ? Qtrue : Qfalse;
 }
 
+typedef struct send_response_ctx {
+  VALUE io;
+  VALUE buffer;
+  unsigned int buffer_len;
+} send_response_ctx;
+
+#define MAX_RESPONSE_BUFFER_SIZE 65536
+
+void send_response_flush_buffer(send_response_ctx *ctx) {
+  if (!ctx->buffer_len) return;
+
+  rb_str_set_len(ctx->buffer, ctx->buffer_len);
+  rb_funcall(ctx->io, ID_iowrite, 1, ctx->buffer);
+  rb_str_set_len(ctx->buffer, 0);
+  ctx->buffer_len = 0;
+}
+
+void send_response_write_status_line(send_response_ctx *ctx, VALUE protocol, VALUE status) {
+  char *ptr = RSTRING_PTR(ctx->buffer);
+
+  unsigned int partlen = RSTRING_LEN(protocol);
+  memcpy(ptr, RSTRING_PTR(protocol), partlen);
+  ctx->buffer_len += partlen;
+  ptr[ctx->buffer_len] = ' ';
+  ctx->buffer_len++;
+
+  ptr += ctx->buffer_len;
+  partlen = RSTRING_LEN(status);
+  memcpy(ptr, RSTRING_PTR(status), partlen);
+  ptr[partlen] = '\r';
+  ptr[partlen + 1] = '\n';
+  ctx->buffer_len += partlen + 2;
+}
+
+int send_response_write_header(VALUE key, VALUE val, VALUE arg) {
+  if (TYPE(key) != T_STRING) key = rb_funcall(key, ID_to_s, 0);
+  char *keyptr = RSTRING_PTR(key);
+  if (RSTRING_LEN(key) < 1 || keyptr[0] == ':') return 0;
+
+  if (TYPE(val) != T_STRING) val = rb_funcall(val, ID_to_s, 0);
+  unsigned int keylen = RSTRING_LEN(key);
+  char *valptr = RSTRING_PTR(val);
+  unsigned int vallen = RSTRING_LEN(val);
+  send_response_ctx *ctx = (send_response_ctx *)arg;
+
+  if (ctx->buffer_len + keylen + vallen > (MAX_RESPONSE_BUFFER_SIZE - 8))
+    send_response_flush_buffer(ctx);
+  
+  char *ptr = RSTRING_PTR(ctx->buffer) + ctx->buffer_len;
+  memcpy(ptr, keyptr, keylen);
+  ptr[keylen] = ':';
+  ptr[keylen + 1] = ' ';
+  ptr += keylen + 2;
+
+  memcpy(ptr, valptr, vallen);
+  ptr[vallen] = '\r';
+  ptr[vallen + 1] = '\n';
+  ctx->buffer_len += keylen + vallen + 4;
+
+  RB_GC_GUARD(key);
+  RB_GC_GUARD(val);
+  
+  return 0; // ST_CONTINUE
+}
+
+VALUE H1P_send_response(int argc,VALUE *argv, VALUE self) {
+  if (argc < 2)
+    rb_raise(eArgumentError, "(wrong number of arguments (expected 2 or more))");
+
+  VALUE io = argv[0];
+  VALUE headers = argv[1];
+  VALUE body = argc >= 3 ? argv[2] : Qnil;
+  VALUE buffer = rb_str_new_literal("");
+  rb_str_modify_expand(buffer, MAX_RESPONSE_BUFFER_SIZE);
+  send_response_ctx ctx = {io, buffer, 0};
+
+  char *bodyptr = 0;
+  unsigned int bodylen = 0;
+
+  VALUE protocol = rb_hash_aref(headers, STR_pseudo_protocol);
+  if (protocol == Qnil) protocol = STR_pseudo_protocol_default;
+
+  VALUE status = rb_hash_aref(headers, STR_pseudo_status);
+  if (status == Qnil) status = STR_pseudo_status_default;
+
+  send_response_write_status_line(&ctx, protocol, status);
+
+  if (body != Qnil) {
+    if (TYPE(body) != T_STRING) body = rb_funcall(body, ID_to_s, 0);
+
+    bodyptr = RSTRING_PTR(body);
+    bodylen = RSTRING_LEN(body);
+
+    rb_hash_aset(headers, STR_content_length_capitalized, INT2FIX(bodylen));
+  }
+
+  rb_hash_foreach(headers, send_response_write_header, (VALUE)&ctx);
+
+  char *endptr = RSTRING_PTR(buffer) + ctx.buffer_len;
+  endptr[0] = '\r';
+  endptr[1] = '\n';
+  ctx.buffer_len += 2;
+
+  if (body != Qnil) {
+    while (bodylen > 0) {
+      unsigned int chunklen = bodylen;
+      if (chunklen > MAX_RESPONSE_BUFFER_SIZE) chunklen = MAX_RESPONSE_BUFFER_SIZE;
+      
+      if (ctx.buffer_len + chunklen > MAX_RESPONSE_BUFFER_SIZE)
+        send_response_flush_buffer(&ctx);
+
+      memcpy(RSTRING_PTR(buffer) + ctx.buffer_len, bodyptr, chunklen);
+      ctx.buffer_len += chunklen;
+      bodyptr += chunklen;
+      bodylen -= chunklen;
+    }
+    RB_GC_GUARD(body);
+  }
+
+  send_response_flush_buffer(&ctx);
+
+  RB_GC_GUARD(buffer);
+
+  return Qnil;
+}
+
 void Init_H1P(void) {
   VALUE mH1P;
   VALUE cParser;
@@ -1100,13 +1233,14 @@ void Init_H1P(void) {
   cError = rb_define_class_under(mH1P, "Error", rb_eRuntimeError);
   rb_gc_register_mark_object(cError);
 
-  // backend methods
   rb_define_method(cParser, "initialize", Parser_initialize, 2);
   rb_define_method(cParser, "parse_headers", Parser_parse_headers, 0);
   rb_define_method(cParser, "read_body", Parser_read_body, 0);
   rb_define_method(cParser, "read_body_chunk", Parser_read_body_chunk, 1);
   rb_define_method(cParser, "splice_body_to", Parser_splice_body_to, 1);
   rb_define_method(cParser, "complete?", Parser_complete_p, 0);
+
+  rb_define_singleton_method(mH1P, "send_response", H1P_send_response, -1);
 
   ID_arity                  = rb_intern("arity");
   ID_backend_read           = rb_intern("backend_read");
@@ -1118,10 +1252,12 @@ void Init_H1P(void) {
   ID_downcase               = rb_intern("downcase");
   ID_eof_p                  = rb_intern("eof?");
   ID_eq                     = rb_intern("==");
+  ID_iowrite                = rb_intern("<<");
   ID_read_method            = rb_intern("__read_method__");
   ID_read                   = rb_intern("read");
   ID_readpartial            = rb_intern("readpartial");
   ID_to_i                   = rb_intern("to_i");
+  ID_to_s                   = rb_intern("to_s");
   ID_upcase                 = rb_intern("upcase");
   ID_write_method           = rb_intern("__write_method__");
 
@@ -1129,16 +1265,19 @@ void Init_H1P(void) {
   NUM_buffer_start = INT2FIX(0);
   NUM_buffer_end = INT2FIX(-1);
 
-  GLOBAL_STR(STR_pseudo_method,         ":method");
-  GLOBAL_STR(STR_pseudo_path,           ":path");
-  GLOBAL_STR(STR_pseudo_protocol,       ":protocol");
-  GLOBAL_STR(STR_pseudo_rx,             ":rx");
-  GLOBAL_STR(STR_pseudo_status,         ":status");
-  GLOBAL_STR(STR_pseudo_status_message, ":status_message");
+  GLOBAL_STR(STR_pseudo_method,           ":method");
+  GLOBAL_STR(STR_pseudo_path,             ":path");
+  GLOBAL_STR(STR_pseudo_protocol,         ":protocol");
+  GLOBAL_STR(STR_pseudo_protocol_default, "HTTP/1.1");
+  GLOBAL_STR(STR_pseudo_rx,               ":rx");
+  GLOBAL_STR(STR_pseudo_status,           ":status");
+  GLOBAL_STR(STR_pseudo_status_default,   "200 OK");
+  GLOBAL_STR(STR_pseudo_status_message,   ":status_message");
 
-  GLOBAL_STR(STR_chunked,               "chunked");
-  GLOBAL_STR(STR_content_length,        "content-length");
-  GLOBAL_STR(STR_transfer_encoding,     "transfer-encoding");
+  GLOBAL_STR(STR_chunked,                     "chunked");
+  GLOBAL_STR(STR_content_length,              "content-length");
+  GLOBAL_STR(STR_content_length_capitalized,  "Content-Length");
+  GLOBAL_STR(STR_transfer_encoding,           "transfer-encoding");
 
   SYM_backend_read  = ID2SYM(ID_backend_read);
   SYM_backend_recv  = ID2SYM(ID_backend_recv);
@@ -1151,6 +1290,8 @@ void Init_H1P(void) {
   SYM_server = ID2SYM(rb_intern("server"));
 
   rb_global_variable(&mH1P);
+
+  eArgumentError = rb_const_get(rb_cObject, rb_intern("ArgumentError"));
 }
 
 void Init_h1p_ext(void) {

@@ -636,4 +636,42 @@ class H1PServerTest < MiniTest::Test
     }, headers)
     assert_equal [{len: 4096}, {len: 4096}], buf
   end
+
+  def test_send_response_status_line
+    i, o = IO.pipe
+    H1P.send_response(o, { ':status' => '418 I\'m a teapot' })
+    o.close
+    response = i.read
+    assert_equal "HTTP/1.1 418 I'm a teapot\r\n\r\n", response
+
+    i, o = IO.pipe
+    H1P.send_response(o, { ':protocol' => 'HTTP/1.0' })
+    o.close
+    response = i.read
+    assert_equal "HTTP/1.0 200 OK\r\n\r\n", response
+  end
+
+  def test_send_response_string_headers
+    i, o = IO.pipe
+    H1P.send_response(o, { 'Foo' => 'Bar', 'Content-Length' => '123' })
+    o.close
+    response = i.read
+    assert_equal "HTTP/1.1 200 OK\r\nFoo: Bar\r\nContent-Length: 123\r\n\r\n", response
+  end
+
+  def test_send_response_non_string_headers
+    i, o = IO.pipe
+    H1P.send_response(o, { :Foo => 'Bar', 'Content-Length' => 123 })
+    o.close
+    response = i.read
+    assert_equal "HTTP/1.1 200 OK\r\nFoo: Bar\r\nContent-Length: 123\r\n\r\n", response
+  end
+
+  def test_send_response_with_body
+    i, o = IO.pipe
+    H1P.send_response(o, {}, "foobar")
+    o.close
+    response = i.read
+    assert_equal "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nfoobar", response
+  end
 end
