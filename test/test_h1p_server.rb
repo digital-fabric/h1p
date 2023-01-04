@@ -674,4 +674,14 @@ class H1PServerTest < MiniTest::Test
     response = i.read
     assert_equal "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nfoobar", response
   end
+
+  def test_send_response_with_big_body
+    i, o = IO.pipe
+    body = "abcdefg" * 10000
+    Thread.new { H1P.send_response(o, {}, body); o.close }
+
+    response = i.read
+    assert_equal "HTTP/1.1 200 OK\r\nContent-Length: #{body.bytesize}\r\n\r\n#{body}", response
+  end
+
 end

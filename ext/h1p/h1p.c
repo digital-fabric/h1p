@@ -1265,14 +1265,14 @@ void Init_H1P(void) {
   NUM_buffer_start = INT2FIX(0);
   NUM_buffer_end = INT2FIX(-1);
 
-  GLOBAL_STR(STR_pseudo_method,           ":method");
-  GLOBAL_STR(STR_pseudo_path,             ":path");
-  GLOBAL_STR(STR_pseudo_protocol,         ":protocol");
-  GLOBAL_STR(STR_pseudo_protocol_default, "HTTP/1.1");
-  GLOBAL_STR(STR_pseudo_rx,               ":rx");
-  GLOBAL_STR(STR_pseudo_status,           ":status");
-  GLOBAL_STR(STR_pseudo_status_default,   "200 OK");
-  GLOBAL_STR(STR_pseudo_status_message,   ":status_message");
+  GLOBAL_STR(STR_pseudo_method,               ":method");
+  GLOBAL_STR(STR_pseudo_path,                 ":path");
+  GLOBAL_STR(STR_pseudo_protocol,             ":protocol");
+  GLOBAL_STR(STR_pseudo_protocol_default,     "HTTP/1.1");
+  GLOBAL_STR(STR_pseudo_rx,                   ":rx");
+  GLOBAL_STR(STR_pseudo_status,               ":status");
+  GLOBAL_STR(STR_pseudo_status_default,       "200 OK");
+  GLOBAL_STR(STR_pseudo_status_message,       ":status_message");
 
   GLOBAL_STR(STR_chunked,                     "chunked");
   GLOBAL_STR(STR_content_length,              "content-length");
