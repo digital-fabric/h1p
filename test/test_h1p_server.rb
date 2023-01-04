@@ -6,7 +6,7 @@ require 'socket'
 require_relative '../ext/h1p/limits'
 require 'securerandom'
 
-class H1PRequestTest < MiniTest::Test
+class H1PServerTest < MiniTest::Test
   Error = H1P::Error
 
   def setup
