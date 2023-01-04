@@ -1,4 +1,3 @@
-#include "ruby.h"
 #include "h1p.h"
 
 // Security-related limits are defined in limits.rb and injected as
@@ -125,7 +124,7 @@ static VALUE Parser_allocate(VALUE klass) {
 #define GetParser(obj, parser) \
   TypedData_Get_Struct((obj), Parser_t, &Parser_type, (parser))
 
-static inline VALUE Polyphony() {
+static inline VALUE Polyphony(void) {
   static VALUE mPolyphony = Qnil;
   if (mPolyphony == Qnil) {
     mPolyphony = rb_const_get(rb_cObject, rb_intern("Polyphony"));
@@ -1016,7 +1015,6 @@ void splice_body_with_content_length(Parser_t *parser, VALUE dest, enum write_me
     parser->current_request_rx += spliced;
     parser->body_left -= spliced;
   }
-done:
   rb_hash_aset(parser->headers, STR_pseudo_rx, INT2FIX(parser->current_request_rx));
   return;
 eof:
@@ -1090,7 +1088,7 @@ VALUE Parser_complete_p(VALUE self) {
   return parser->request_completed ? Qtrue : Qfalse;
 }
 
-void Init_H1P() {
+void Init_H1P(void) {
   VALUE mH1P;
   VALUE cParser;
 
@@ -1155,6 +1153,6 @@ void Init_H1P() {
   rb_global_variable(&mH1P);
 }
 
-void Init_h1p_ext() {
+void Init_h1p_ext(void) {
   Init_H1P();
 }
