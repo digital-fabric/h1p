@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
 require 'bundler/setup'
-
 require 'fileutils'
-
 require 'minitest/autorun'
 
 module Minitest::Assertions

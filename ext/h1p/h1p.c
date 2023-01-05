@@ -22,13 +22,13 @@ ID ID_call;
 ID ID_downcase;
 ID ID_eof_p;
 ID ID_eq;
-ID ID_iowrite;
 ID ID_read_method;
 ID ID_read;
 ID ID_readpartial;
 ID ID_to_i;
 ID ID_to_s;
 ID ID_upcase;
+ID ID_write;
 ID ID_write_method;
 
 static VALUE cError;
@@ -52,6 +52,9 @@ VALUE STR_chunked;
 VALUE STR_content_length;
 VALUE STR_content_length_capitalized;
 VALUE STR_transfer_encoding;
+
+VALUE STR_CRLF;
+VALUE STR_EMPTY_CHUNK;
 
 VALUE SYM_backend_read;
 VALUE SYM_backend_recv;
@@ -1099,6 +1102,7 @@ typedef struct send_response_ctx {
   VALUE io;
   VALUE buffer;
   unsigned int buffer_len;
+  unsigned int total_written;
 } send_response_ctx;
 
 #define MAX_RESPONSE_BUFFER_SIZE 65536
@@ -1107,7 +1111,9 @@ void send_response_flush_buffer(send_response_ctx *ctx) {
   if (!ctx->buffer_len) return;
 
   rb_str_set_len(ctx->buffer, ctx->buffer_len);
-  rb_funcall(ctx->io, ID_iowrite, 1, ctx->buffer);
+  VALUE written = rb_funcall(ctx->io, ID_write, 1, ctx->buffer);
+  ctx->total_written += NUM2INT(written);
+  
   rb_str_set_len(ctx->buffer, 0);
   ctx->buffer_len = 0;
 }
@@ -1169,7 +1175,7 @@ VALUE H1P_send_response(int argc,VALUE *argv, VALUE self) {
   VALUE body = argc >= 3 ? argv[2] : Qnil;
   VALUE buffer = rb_str_new_literal("");
   rb_str_modify_expand(buffer, MAX_RESPONSE_BUFFER_SIZE);
-  send_response_ctx ctx = {io, buffer, 0};
+  send_response_ctx ctx = {io, buffer, 0, 0};
 
   char *bodyptr = 0;
   unsigned int bodylen = 0;
@@ -1218,7 +1224,25 @@ VALUE H1P_send_response(int argc,VALUE *argv, VALUE self) {
 
   RB_GC_GUARD(buffer);
 
-  return Qnil;
+  return INT2FIX(ctx.total_written);
+}
+
+VALUE H1P_send_body_chunk(VALUE self, VALUE io, VALUE chunk) {
+  if (chunk != Qnil) {
+    if (TYPE(chunk) != T_STRING) chunk = rb_funcall(chunk, ID_to_s, 0);
+
+    VALUE len_string = rb_str_new_literal("");
+    rb_str_modify_expand(len_string, 16);
+    int len_string_len = sprintf(RSTRING_PTR(len_string), "%lx\r\n", RSTRING_LEN(chunk));
+    rb_str_set_len(len_string,len_string_len);
+
+    VALUE total_written = rb_funcall(io, ID_write, 3, len_string, chunk, STR_CRLF);
+    RB_GC_GUARD(chunk);
+    return total_written;
+  }
+  else {
+    return rb_funcall(io, ID_write, 1, STR_EMPTY_CHUNK);
+  }
 }
 
 void Init_H1P(void) {
@@ -1241,6 +1265,8 @@ void Init_H1P(void) {
   rb_define_method(cParser, "complete?", Parser_complete_p, 0);
 
   rb_define_singleton_method(mH1P, "send_response", H1P_send_response, -1);
+  rb_define_singleton_method(mH1P, "send_body_chunk", H1P_send_body_chunk, 2);
+  // rb_define_singleton_method(mH1P, "send_chunked_response", H1P_send_response, -1);
 
   ID_arity                  = rb_intern("arity");
   ID_backend_read           = rb_intern("backend_read");
@@ -1252,13 +1278,13 @@ void Init_H1P(void) {
   ID_downcase               = rb_intern("downcase");
   ID_eof_p                  = rb_intern("eof?");
   ID_eq                     = rb_intern("==");
-  ID_iowrite                = rb_intern("<<");
   ID_read_method            = rb_intern("__read_method__");
   ID_read                   = rb_intern("read");
   ID_readpartial            = rb_intern("readpartial");
   ID_to_i                   = rb_intern("to_i");
   ID_to_s                   = rb_intern("to_s");
   ID_upcase                 = rb_intern("upcase");
+  ID_write                  = rb_intern("write");
   ID_write_method           = rb_intern("__write_method__");
 
   NUM_max_headers_read_length = INT2FIX(MAX_HEADERS_READ_LENGTH);
@@ -1278,6 +1304,9 @@ void Init_H1P(void) {
   GLOBAL_STR(STR_content_length,              "content-length");
   GLOBAL_STR(STR_content_length_capitalized,  "Content-Length");
   GLOBAL_STR(STR_transfer_encoding,           "transfer-encoding");
+
+  GLOBAL_STR(STR_CRLF,                        "\r\n");
+  GLOBAL_STR(STR_EMPTY_CHUNK,                 "0\r\n\r\n");
 
   SYM_backend_read  = ID2SYM(ID_backend_read);
   SYM_backend_recv  = ID2SYM(ID_backend_recv);
