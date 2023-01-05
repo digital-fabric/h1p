@@ -94,3 +94,21 @@ class SendBodyChunkTest < MiniTest::Test
     assert_equal chunk.bytesize + chunk.bytesize.to_s(16).bytesize + 4, len
   end
 end
+
+class SendChunkedResponseTest < MiniTest::Test
+  def test_send_chunked_response
+    isrc, osrc = IO.pipe
+    osrc << 'foobarbaz'
+    osrc.close
+
+    i, o = IO.pipe
+    len = H1P.send_chunked_response(o, { 'Foo' => 'bar' }) do
+      isrc.read(3)
+    end
+    o.close
+
+    response = i.read
+    assert_equal "HTTP/1.1 200 OK\r\nFoo: bar\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nfoo\r\n3\r\nbar\r\n3\r\nbaz\r\n0\r\n\r\n", response
+    assert_equal len, response.bytesize
+  end
+end

@@ -52,6 +52,7 @@ VALUE STR_chunked;
 VALUE STR_content_length;
 VALUE STR_content_length_capitalized;
 VALUE STR_transfer_encoding;
+VALUE STR_transfer_encoding_capitalized;
 
 VALUE STR_CRLF;
 VALUE STR_EMPTY_CHUNK;
@@ -1101,6 +1102,7 @@ VALUE Parser_complete_p(VALUE self) {
 typedef struct send_response_ctx {
   VALUE io;
   VALUE buffer;
+  char *buffer_ptr;
   unsigned int buffer_len;
   unsigned int total_written;
 } send_response_ctx;
@@ -1119,7 +1121,7 @@ void send_response_flush_buffer(send_response_ctx *ctx) {
 }
 
 void send_response_write_status_line(send_response_ctx *ctx, VALUE protocol, VALUE status) {
-  char *ptr = RSTRING_PTR(ctx->buffer);
+  char *ptr = ctx->buffer_ptr;
 
   unsigned int partlen = RSTRING_LEN(protocol);
   memcpy(ptr, RSTRING_PTR(protocol), partlen);
@@ -1149,7 +1151,7 @@ int send_response_write_header(VALUE key, VALUE val, VALUE arg) {
   if (ctx->buffer_len + keylen + vallen > (MAX_RESPONSE_BUFFER_SIZE - 8))
     send_response_flush_buffer(ctx);
   
-  char *ptr = RSTRING_PTR(ctx->buffer) + ctx->buffer_len;
+  char *ptr = ctx->buffer_ptr + ctx->buffer_len;
   memcpy(ptr, keyptr, keylen);
   ptr[keylen] = ':';
   ptr[keylen + 1] = ' ';
@@ -1175,17 +1177,15 @@ VALUE H1P_send_response(int argc,VALUE *argv, VALUE self) {
   VALUE body = argc >= 3 ? argv[2] : Qnil;
   VALUE buffer = rb_str_new_literal("");
   rb_str_modify_expand(buffer, MAX_RESPONSE_BUFFER_SIZE);
-  send_response_ctx ctx = {io, buffer, 0, 0};
+  send_response_ctx ctx = {io, buffer, RSTRING_PTR(buffer), 0, 0};
 
   char *bodyptr = 0;
   unsigned int bodylen = 0;
 
   VALUE protocol = rb_hash_aref(headers, STR_pseudo_protocol);
   if (protocol == Qnil) protocol = STR_pseudo_protocol_default;
-
   VALUE status = rb_hash_aref(headers, STR_pseudo_status);
   if (status == Qnil) status = STR_pseudo_status_default;
-
   send_response_write_status_line(&ctx, protocol, status);
 
   if (body != Qnil) {
@@ -1193,13 +1193,12 @@ VALUE H1P_send_response(int argc,VALUE *argv, VALUE self) {
 
     bodyptr = RSTRING_PTR(body);
     bodylen = RSTRING_LEN(body);
-
     rb_hash_aset(headers, STR_content_length_capitalized, INT2FIX(bodylen));
   }
 
   rb_hash_foreach(headers, send_response_write_header, (VALUE)&ctx);
 
-  char *endptr = RSTRING_PTR(buffer) + ctx.buffer_len;
+  char *endptr = ctx.buffer_ptr + ctx.buffer_len;
   endptr[0] = '\r';
   endptr[1] = '\n';
   ctx.buffer_len += 2;
@@ -1212,7 +1211,7 @@ VALUE H1P_send_response(int argc,VALUE *argv, VALUE self) {
       if (ctx.buffer_len + chunklen > MAX_RESPONSE_BUFFER_SIZE)
         send_response_flush_buffer(&ctx);
 
-      memcpy(RSTRING_PTR(buffer) + ctx.buffer_len, bodyptr, chunklen);
+      memcpy(ctx.buffer_ptr + ctx.buffer_len, bodyptr, chunklen);
       ctx.buffer_len += chunklen;
       bodyptr += chunklen;
       bodylen -= chunklen;
@@ -1237,12 +1236,59 @@ VALUE H1P_send_body_chunk(VALUE self, VALUE io, VALUE chunk) {
     rb_str_set_len(len_string,len_string_len);
 
     VALUE total_written = rb_funcall(io, ID_write, 3, len_string, chunk, STR_CRLF);
+
+    RB_GC_GUARD(len_string);
     RB_GC_GUARD(chunk);
     return total_written;
   }
   else {
     return rb_funcall(io, ID_write, 1, STR_EMPTY_CHUNK);
   }
+}
+
+VALUE H1P_send_chunked_response(VALUE self, VALUE io, VALUE headers) {
+  VALUE buffer = rb_str_new_literal("");
+  rb_str_modify_expand(buffer, MAX_RESPONSE_BUFFER_SIZE);
+  send_response_ctx ctx = {io, buffer, RSTRING_PTR(buffer), 0, 0};
+
+  VALUE protocol = rb_hash_aref(headers, STR_pseudo_protocol);
+  if (protocol == Qnil) protocol = STR_pseudo_protocol_default;
+  VALUE status = rb_hash_aref(headers, STR_pseudo_status);
+  if (status == Qnil) status = STR_pseudo_status_default;
+  send_response_write_status_line(&ctx, protocol, status);
+
+  rb_hash_aset(headers, STR_transfer_encoding_capitalized, STR_chunked);
+  rb_hash_foreach(headers, send_response_write_header, (VALUE)&ctx);
+
+  ctx.buffer_ptr[ctx.buffer_len] = '\r';
+  ctx.buffer_ptr[ctx.buffer_len + 1] = '\n';
+  ctx.buffer_len += 2;
+  send_response_flush_buffer(&ctx);
+
+  VALUE len_string = rb_str_new_literal("");
+  rb_str_modify_expand(len_string, 16);
+  while (true) {
+    VALUE chunk = rb_yield(Qnil);
+    if (chunk == Qnil) {
+      VALUE written = rb_funcall(io, ID_write, 1, STR_EMPTY_CHUNK);
+      ctx.total_written += NUM2INT(written);
+      break;
+    }
+    else {
+      if (TYPE(chunk) != T_STRING) chunk = rb_funcall(chunk, ID_to_s, 0);
+
+      int len_string_len = sprintf(RSTRING_PTR(len_string), "%lx\r\n", RSTRING_LEN(chunk));
+      rb_str_set_len(len_string,len_string_len);
+      VALUE written = rb_funcall(io, ID_write, 3, len_string, chunk, STR_CRLF);
+      ctx.total_written += NUM2INT(written);
+    }
+    RB_GC_GUARD(chunk);
+  }
+
+  RB_GC_GUARD(len_string);
+  RB_GC_GUARD(buffer);
+
+  return INT2FIX(ctx.total_written);
 }
 
 void Init_H1P(void) {
@@ -1266,7 +1312,7 @@ void Init_H1P(void) {
 
   rb_define_singleton_method(mH1P, "send_response", H1P_send_response, -1);
   rb_define_singleton_method(mH1P, "send_body_chunk", H1P_send_body_chunk, 2);
-  // rb_define_singleton_method(mH1P, "send_chunked_response", H1P_send_response, -1);
+  rb_define_singleton_method(mH1P, "send_chunked_response", H1P_send_chunked_response, 2);
 
   ID_arity                  = rb_intern("arity");
   ID_backend_read           = rb_intern("backend_read");
@@ -1300,10 +1346,11 @@ void Init_H1P(void) {
   GLOBAL_STR(STR_pseudo_status_default,       "200 OK");
   GLOBAL_STR(STR_pseudo_status_message,       ":status_message");
 
-  GLOBAL_STR(STR_chunked,                     "chunked");
-  GLOBAL_STR(STR_content_length,              "content-length");
-  GLOBAL_STR(STR_content_length_capitalized,  "Content-Length");
-  GLOBAL_STR(STR_transfer_encoding,           "transfer-encoding");
+  GLOBAL_STR(STR_chunked,                       "chunked");
+  GLOBAL_STR(STR_content_length,                "content-length");
+  GLOBAL_STR(STR_content_length_capitalized,    "Content-Length");
+  GLOBAL_STR(STR_transfer_encoding,             "transfer-encoding");
+  GLOBAL_STR(STR_transfer_encoding_capitalized, "Transfer-Encoding");
 
   GLOBAL_STR(STR_CRLF,                        "\r\n");
   GLOBAL_STR(STR_EMPTY_CHUNK,                 "0\r\n\r\n");
