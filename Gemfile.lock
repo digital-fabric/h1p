@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    h1p (0.5)
+    h1p (0.6)
 
 GEM
   remote: https://rubygems.org/

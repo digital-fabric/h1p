@@ -1,4 +1,4 @@
-# H1P - a blocking HTTP/1 parser for Ruby
+# H1P - HTTP/1 tools for Ruby
 
 [![Gem Version](https://badge.fury.io/rb/h1p.svg)](http://rubygems.org/gems/h1p)
 [![H1P Test](https://github.com/digital-fabric/h1p/workflows/Tests/badge.svg)](https://github.com/digital-fabric/h1p/actions?query=workflow%3ATests)
@@ -14,9 +14,8 @@ The H1P was originally written as part of
 [Tipi](https://github.com/digital-fabric/tipi), a web server running on top of
 [Polyphony](https://github.com/digital-fabric/polyphony).
 
-> H1P is still a very young project and as such should be used with caution. It
-> has not undergone any significant conformance or security testing, and its API
-> is not yet stable.
+In addition to parsing, H1P offers APIs for formatting and writing HTTP/1
+requests and responses.
 
 ## Features
 
@@ -29,6 +28,8 @@ The H1P was originally written as part of
 - Support for **splicing** request/response bodies (when used with
   [Polyphony](https://github.com/digital-fabric/polyphony))
 - Track total incoming traffic
+- Write HTTP requests and responses to any IO instance, with support for chunked
+  transfer encoding.
 
 ## Installing
 
@@ -221,7 +222,54 @@ as they conform to one of two alternative interfaces:
   #=> {":method"=>"get", ":path"=>"/foo", ":protocol"=>"http/1.1", ":rx"=>21}
   ```
 
-## Design
+## Writing HTTP requests and responses
+
+H1P implements optimized methods for writing HTTP requests and responses to
+arbitrary IO instances. To write a response with or without a body, use
+`H1P.send_response(io, headers, body = nil)`:
+
+```ruby
+H1P.send_response(socket, { 'Some-Header' => 'header value'}, 'foobar')
+#=> "HTTP/1.1 200 OK\r\nSome-Header: header value\r\n\r\nfoobar"
+
+# The :protocol pseudo header sets the protocol in the status line:
+H1P.send_response(socket, { ':protocol' => 'HTTP/0.9' })
+#=> "HTTP/0.9 200 OK\r\n\r\n"
+
+# The :status pseudo header sets the response status:
+H1P.send_response(socket, { ':status' => '418 I\'m a teapot' })
+#=> "HTTP/1.1 418 I'm a teapot\r\n\r\n"
+```
+
+To send responses using chunked transfer encoding use
+`H1P.send_chunked_response(io, header, body = nil)`:
+
+```ruby
+H1P.send_chunked_response(socket, {}, "foobar")
+#=> "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n6\r\nfoobar\r\n0\r\n\r\n"
+```
+
+You can also call `H1P.send_chunked_response` with a block that provides the
+next chunk to send. The last chunk is signalled by returning `nil` from the
+block:
+
+```ruby
+IO.open('/path/to/file') do |f|
+  H1P.send_chunked_response(socket, {}) { f.read(CHUNK_SIZE) }
+end
+```
+
+To send individual chunks use `H1P.send_body_chunk`:
+
+```ruby
+H1P.send_body_chunk(socket, 'foo')
+#=> "3\r\nfoo\r\n"
+
+H1P.send_body_chunk(socket, nil)
+#=> "0\r\n\r\n"
+```
+
+## Parser Design
 
 The H1P parser design is based on the following principles:
 

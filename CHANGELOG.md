@@ -1,3 +1,9 @@
+## 0.6 2023-01-05
+
+- Implement `H1P.send_body_chunk`
+- Implement `H1P.send_chunked_response`
+- Implement `H1P.send_response`
+
 ## 0.5 2022-03-19
 
 - Implement `Parser#splice_body_to` (#3)
