@@ -1267,7 +1267,7 @@ VALUE H1P_send_chunked_response(VALUE self, VALUE io, VALUE headers) {
 
   VALUE len_string = rb_str_new_literal("");
   rb_str_modify_expand(len_string, 16);
-  while (true) {
+  while (1) {
     VALUE chunk = rb_yield(Qnil);
     if (chunk == Qnil) {
       VALUE written = rb_funcall(io, ID_write, 1, STR_EMPTY_CHUNK);
