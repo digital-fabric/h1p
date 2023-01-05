@@ -1,5 +1,6 @@
 ## 0.6 2023-01-05
 
+- Add documentation
 - Implement `H1P.send_body_chunk`
 - Implement `H1P.send_chunked_response`
 - Implement `H1P.send_response`

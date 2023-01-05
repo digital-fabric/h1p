@@ -176,6 +176,12 @@ enum parser_mode parse_parser_mode(VALUE mode) {
   rb_raise(rb_eRuntimeError, "Invalid parser mode specified");
 }
 
+/* call-seq:
+ *   parser.initialize(io, mode)
+ *
+ * Initializes a new parser with the given IO instance and mode. Mode is either
+ * `:server` or `:client`.
+ */
 VALUE Parser_initialize(VALUE self, VALUE io, VALUE mode) {
   Parser_t *parser;
   GetParser(self, parser);
@@ -716,6 +722,19 @@ eof:
   return 0;
 }
 
+/* call-seq: parser.parse_headers -> headers
+ *
+ * Parses headers from the associated IO instance, returning a hash mapping
+ * header keys to their respective values. Header keys are downcased and dashes
+ * are converted to underscores. The returned headers will also include the
+ * following pseudo-headers:
+ * 
+ * - `':protocol'` - the protocol as specified in the query line / status line
+ * - `':path'` - the query path (for HTTP requests)
+ * - `':method'` - the HTTP method (for HTTP requests)
+ * - `':status'` - the HTTP status (for HTTP responses)
+ * - `':rx'` - the total number of bytes read by the parser
+ */
 VALUE Parser_parse_headers(VALUE self) {
   Parser_t *parser;
   GetParser(self, parser);
@@ -1065,14 +1084,29 @@ static inline VALUE read_body(VALUE self, int read_entire_body, int buffered_onl
     return read_body_with_content_length(parser, read_entire_body, buffered_only);
 }
 
+/* call-seq: parser.read_body -> body
+ *
+ * Reads an HTTP request/response body from the associated IO instance.
+ */
 VALUE Parser_read_body(VALUE self) {
   return read_body(self, 1, 0);
 }
 
+/* call-seq: parser.read_body_chunk(buffered_only) -> chunk
+ *
+ * Reads a single body chunk (useful for chunked transfer encoding). If
+ * `buffered_only` is true, will only read from the underlying buffer, without
+ * reading from the associated IO instance.
+ */
 VALUE Parser_read_body_chunk(VALUE self, VALUE buffered_only) {
   return read_body(self, 0, buffered_only == Qtrue);
 }
 
+/* call-seq: parser.splice_body_to(dest)
+ *
+ * Splices the HTTP request/response body from the associated IO instance to
+ * `dest`.
+ */
 VALUE Parser_splice_body_to(VALUE self, VALUE dest) {
   Parser_t *parser;
   GetParser(self, parser);
@@ -1089,6 +1123,11 @@ VALUE Parser_splice_body_to(VALUE self, VALUE dest) {
   return self;
 }
 
+/* call-seq: parser.complete?
+ *
+ * Returns true if a complete HTTP request/response has been read from the
+ * associated IO instance.
+ */
 VALUE Parser_complete_p(VALUE self) {
   Parser_t *parser;
   GetParser(self, parser);
@@ -1168,6 +1207,10 @@ int send_response_write_header(VALUE key, VALUE val, VALUE arg) {
   return 0; // ST_CONTINUE
 }
 
+/* call-seq: H1P.send_response(io, headers, body = nil) -> total_written
+ *
+ * Sends an HTTP response with the given headers and body.
+ */
 VALUE H1P_send_response(int argc,VALUE *argv, VALUE self) {
   if (argc < 2)
     rb_raise(eArgumentError, "(wrong number of arguments (expected 2 or more))");
@@ -1226,6 +1269,10 @@ VALUE H1P_send_response(int argc,VALUE *argv, VALUE self) {
   return INT2FIX(ctx.total_written);
 }
 
+/* call-seq: H1P.send_body_chunk(io, chunk) -> total_written
+ *
+ * Sends a body chunk using chunked transfer encoding.
+ */
 VALUE H1P_send_body_chunk(VALUE self, VALUE io, VALUE chunk) {
   if (chunk != Qnil) {
     if (TYPE(chunk) != T_STRING) chunk = rb_funcall(chunk, ID_to_s, 0);
@@ -1246,6 +1293,11 @@ VALUE H1P_send_body_chunk(VALUE self, VALUE io, VALUE chunk) {
   }
 }
 
+/* call-seq: H1P.send_chunked_response(io, headers, body = nil) -> total_written
+ *
+ * Sends an HTTP response with the given headers and body using chunked transfer
+ * encoding.
+ */
 VALUE H1P_send_chunked_response(VALUE self, VALUE io, VALUE headers) {
   VALUE buffer = rb_str_new_literal("");
   rb_str_modify_expand(buffer, MAX_RESPONSE_BUFFER_SIZE);
