@@ -1,3 +1,7 @@
+## 0.6.1 2023-05-28
+
+- Fix sending response with frozen headers hash
+
 ## 0.6 2023-01-05
 
 - Add documentation
