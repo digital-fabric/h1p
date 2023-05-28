@@ -230,15 +230,22 @@ arbitrary IO instances. To write a response with or without a body, use
 
 ```ruby
 H1P.send_response(socket, { 'Some-Header' => 'header value'}, 'foobar')
-#=> "HTTP/1.1 200 OK\r\nSome-Header: header value\r\n\r\nfoobar"
+# HTTP/1.1 200 OK
+# Some-Header: header value
+# 
+# foobar
 
 # The :protocol pseudo header sets the protocol in the status line:
 H1P.send_response(socket, { ':protocol' => 'HTTP/0.9' })
-#=> "HTTP/0.9 200 OK\r\n\r\n"
+# HTTP/0.9 200 OK
+#
+#
 
 # The :status pseudo header sets the response status:
 H1P.send_response(socket, { ':status' => '418 I\'m a teapot' })
-#=> "HTTP/1.1 418 I'm a teapot\r\n\r\n"
+# HTTP/1.1 418 I'm a teapot
+#
+#
 ```
 
 To send responses using chunked transfer encoding use
@@ -246,7 +253,13 @@ To send responses using chunked transfer encoding use
 
 ```ruby
 H1P.send_chunked_response(socket, {}, "foobar")
-#=> "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n6\r\nfoobar\r\n0\r\n\r\n"
+# HTTP/1.1 200 OK
+# Transfer-Encoding: chunked
+# 6
+# foobar
+# 0
+#
+#
 ```
 
 You can also call `H1P.send_chunked_response` with a block that provides the
@@ -263,10 +276,14 @@ To send individual chunks use `H1P.send_body_chunk`:
 
 ```ruby
 H1P.send_body_chunk(socket, 'foo')
-#=> "3\r\nfoo\r\n"
+# 3
+# foo
+#
 
 H1P.send_body_chunk(socket, nil)
-#=> "0\r\n\r\n"
+# 0
+#
+#
 ```
 
 ## Parser Design

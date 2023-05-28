@@ -9,30 +9,30 @@ class SendResponseTest < MiniTest::Test
     H1P.send_response(o, { ':status' => '418 I\'m a teapot' })
     o.close
     response = i.read
-    assert_equal "HTTP/1.1 418 I'm a teapot\r\n\r\n", response
+    assert_equal "HTTP/1.1 418 I'm a teapot\r\nContent-Length: 0\r\n\r\n", response
 
     i, o = IO.pipe
     count = H1P.send_response(o, { ':protocol' => 'HTTP/1.0' })
     o.close
     response = i.read
-    assert_equal "HTTP/1.0 200 OK\r\n\r\n", response
-    assert_equal "HTTP/1.0 200 OK\r\n\r\n".bytesize, count
+    assert_equal "HTTP/1.0 200 OK\r\nContent-Length: 0\r\n\r\n", response
+    assert_equal "HTTP/1.0 200 OK\r\nContent-Length: 0\r\n\r\n".bytesize, count
   end
 
   def test_send_response_string_headers
     i, o = IO.pipe
-    H1P.send_response(o, { 'Foo' => 'Bar', 'Content-Length' => '123' })
+    H1P.send_response(o, { 'Foo' => 'Bar', 'X-Blah' => '123' })
     o.close
     response = i.read
-    assert_equal "HTTP/1.1 200 OK\r\nFoo: Bar\r\nContent-Length: 123\r\n\r\n", response
+    assert_equal "HTTP/1.1 200 OK\r\nFoo: Bar\r\nX-Blah: 123\r\nContent-Length: 0\r\n\r\n", response
   end
 
   def test_send_response_non_string_headers
     i, o = IO.pipe
-    H1P.send_response(o, { :Foo => 'Bar', 'Content-Length' => 123 })
+    H1P.send_response(o, { :Foo => 'Bar', 'X-Blah' => 123 })
     o.close
     response = i.read
-    assert_equal "HTTP/1.1 200 OK\r\nFoo: Bar\r\nContent-Length: 123\r\n\r\n", response
+    assert_equal "HTTP/1.1 200 OK\r\nFoo: Bar\r\nX-Blah: 123\r\nContent-Length: 0\r\n\r\n", response
   end
 
   def test_send_response_with_body
@@ -41,6 +41,15 @@ class SendResponseTest < MiniTest::Test
     o.close
     response = i.read
     assert_equal "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nfoobar", response
+  end
+
+  def test_send_response_with_frozen_headers_hash
+    i, o = IO.pipe
+    h = {Foo: 'bar'}.freeze
+    H1P.send_response(o, h, 'foo')
+    o.close
+    response = i.read
+    assert_equal "HTTP/1.1 200 OK\r\nFoo: bar\r\nContent-Length: 3\r\n\r\nfoo", response
   end
 
   def test_send_response_with_big_body
@@ -103,6 +112,23 @@ class SendChunkedResponseTest < MiniTest::Test
 
     i, o = IO.pipe
     len = H1P.send_chunked_response(o, { 'Foo' => 'bar' }) do
+      isrc.read(3)
+    end
+    o.close
+
+    response = i.read
+    assert_equal "HTTP/1.1 200 OK\r\nFoo: bar\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nfoo\r\n3\r\nbar\r\n3\r\nbaz\r\n0\r\n\r\n", response
+    assert_equal len, response.bytesize
+  end
+
+  def test_send_chunked_response_with_frozen_headers_hash
+    isrc, osrc = IO.pipe
+    osrc << 'foobarbaz'
+    osrc.close
+
+    i, o = IO.pipe
+    h = { 'Foo' => 'bar' }.freeze
+    len = H1P.send_chunked_response(o, h) do
       isrc.read(3)
     end
     o.close

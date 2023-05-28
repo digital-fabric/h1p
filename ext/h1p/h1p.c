@@ -1236,10 +1236,11 @@ VALUE H1P_send_response(int argc,VALUE *argv, VALUE self) {
 
     bodyptr = RSTRING_PTR(body);
     bodylen = RSTRING_LEN(body);
-    rb_hash_aset(headers, STR_content_length_capitalized, INT2FIX(bodylen));
+    // rb_hash_aset(headers, STR_content_length_capitalized, INT2FIX(bodylen));
   }
 
   rb_hash_foreach(headers, send_response_write_header, (VALUE)&ctx);
+  send_response_write_header(STR_content_length_capitalized, INT2FIX(bodylen), (VALUE)&ctx);
 
   char *endptr = ctx.buffer_ptr + ctx.buffer_len;
   endptr[0] = '\r';
@@ -1309,8 +1310,8 @@ VALUE H1P_send_chunked_response(VALUE self, VALUE io, VALUE headers) {
   if (status == Qnil) status = STR_pseudo_status_default;
   send_response_write_status_line(&ctx, protocol, status);
 
-  rb_hash_aset(headers, STR_transfer_encoding_capitalized, STR_chunked);
   rb_hash_foreach(headers, send_response_write_header, (VALUE)&ctx);
+  send_response_write_header(STR_transfer_encoding_capitalized, STR_chunked, (VALUE)&ctx);
 
   ctx.buffer_ptr[ctx.buffer_len] = '\r';
   ctx.buffer_ptr[ctx.buffer_len + 1] = '\n';
