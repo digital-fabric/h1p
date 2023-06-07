@@ -22,6 +22,7 @@ ID ID_call;
 ID ID_downcase;
 ID ID_eof_p;
 ID ID_eq;
+ID ID_join;
 ID ID_read_method;
 ID ID_read;
 ID ID_readpartial;
@@ -56,6 +57,7 @@ VALUE STR_transfer_encoding_capitalized;
 
 VALUE STR_CRLF;
 VALUE STR_EMPTY_CHUNK;
+VALUE STR_COMMA_SPACE;
 
 VALUE SYM_backend_read;
 VALUE SYM_backend_recv;
@@ -1176,12 +1178,24 @@ void send_response_write_status_line(send_response_ctx *ctx, VALUE protocol, VAL
   ctx->buffer_len += partlen + 2;
 }
 
+inline static VALUE format_comma_separated_header_values(VALUE array) {
+  return rb_funcall(array, ID_join, 1, STR_COMMA_SPACE);
+}
+
 int send_response_write_header(VALUE key, VALUE val, VALUE arg) {
   if (TYPE(key) != T_STRING) key = rb_funcall(key, ID_to_s, 0);
   char *keyptr = RSTRING_PTR(key);
   if (RSTRING_LEN(key) < 1 || keyptr[0] == ':') return 0;
 
-  if (TYPE(val) != T_STRING) val = rb_funcall(val, ID_to_s, 0);
+  switch (TYPE(val)) {
+    case T_STRING:
+      break;
+    case T_ARRAY:
+      val = format_comma_separated_header_values(val);
+      break;
+    default:
+      val = rb_funcall(val, ID_to_s, 0);
+  }
   unsigned int keylen = RSTRING_LEN(key);
   char *valptr = RSTRING_PTR(val);
   unsigned int vallen = RSTRING_LEN(val);
@@ -1377,6 +1391,7 @@ void Init_H1P(void) {
   ID_downcase               = rb_intern("downcase");
   ID_eof_p                  = rb_intern("eof?");
   ID_eq                     = rb_intern("==");
+  ID_join                   = rb_intern("join");
   ID_read_method            = rb_intern("__read_method__");
   ID_read                   = rb_intern("read");
   ID_readpartial            = rb_intern("readpartial");
@@ -1405,8 +1420,9 @@ void Init_H1P(void) {
   GLOBAL_STR(STR_transfer_encoding,             "transfer-encoding");
   GLOBAL_STR(STR_transfer_encoding_capitalized, "Transfer-Encoding");
 
-  GLOBAL_STR(STR_CRLF,                        "\r\n");
-  GLOBAL_STR(STR_EMPTY_CHUNK,                 "0\r\n\r\n");
+  GLOBAL_STR(STR_CRLF,                          "\r\n");
+  GLOBAL_STR(STR_EMPTY_CHUNK,                   "0\r\n\r\n");
+  GLOBAL_STR(STR_COMMA_SPACE,                   ", ");
 
   SYM_backend_read  = ID2SYM(ID_backend_read);
   SYM_backend_recv  = ID2SYM(ID_backend_recv);

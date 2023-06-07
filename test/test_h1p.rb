@@ -35,6 +35,14 @@ class SendResponseTest < MiniTest::Test
     assert_equal "HTTP/1.1 200 OK\r\nFoo: Bar\r\nX-Blah: 123\r\nContent-Length: 0\r\n\r\n", response
   end
 
+  def test_send_response_multiple_header_values
+    i, o = IO.pipe
+    H1P.send_response(o, { :Foo => ['Bar', 'Baz'], 'X-Blah' => 123 })
+    o.close
+    response = i.read
+    assert_equal "HTTP/1.1 200 OK\r\nFoo: Bar, Baz\r\nX-Blah: 123\r\nContent-Length: 0\r\n\r\n", response
+  end
+
   def test_send_response_with_body
     i, o = IO.pipe
     H1P.send_response(o, {}, "foobar")
