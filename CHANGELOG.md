@@ -1,3 +1,7 @@
+## 1.0 2023-06-07
+
+- Add support for array as header value (#2)
+
 ## 0.6.1 2023-05-28
 
 - Fix sending response with frozen headers hash
