@@ -105,7 +105,7 @@ class SendBodyChunkTest < MiniTest::Test
       len = H1P.send_body_chunk(o, chunk)
       o.close
     end
-    
+
     response = i.read
     assert_equal "#{chunk.bytesize.to_s(16)}\r\n#{chunk}\r\n", response
     assert_equal chunk.bytesize + chunk.bytesize.to_s(16).bytesize + 4, len

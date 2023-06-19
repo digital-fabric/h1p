@@ -471,7 +471,7 @@ class H1PServerTest < MiniTest::Test
       @o.close
     end
     def w.__write_method__; :backend_write; end
-    
+
     headers = @parser.parse_headers
     @parser.splice_body_to(w)
     w.close
@@ -492,7 +492,7 @@ class H1PServerTest < MiniTest::Test
       @o.close
     end
     def w.__write_method__; :backend_write; end
-    
+
     headers = @parser.parse_headers
     @parser.splice_body_to(w)
     w.close
