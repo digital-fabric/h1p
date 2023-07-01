@@ -1,3 +1,4 @@
+#include <stdnoreturn.h>
 #include "h1p.h"
 
 // Security-related limits are defined in limits.rb and injected as
@@ -724,20 +725,7 @@ eof:
   return 0;
 }
 
-/* call-seq: parser.parse_headers -> headers
- *
- * Parses headers from the associated IO instance, returning a hash mapping
- * header keys to their respective values. Header keys are downcased and dashes
- * are converted to underscores. The returned headers will also include the
- * following pseudo-headers:
- * 
- * - `':protocol'` - the protocol as specified in the query line / status line
- * - `':path'` - the query path (for HTTP requests)
- * - `':method'` - the HTTP method (for HTTP requests)
- * - `':status'` - the HTTP status (for HTTP responses)
- * - `':rx'` - the total number of bytes read by the parser
- */
-VALUE Parser_parse_headers(VALUE self) {
+VALUE Parser_parse_headers_safe(VALUE self) {
   Parser_t *parser;
   GetParser(self, parser);
   parser->headers = rb_hash_new();
@@ -773,6 +761,31 @@ done:
   if (parser->headers != Qnil)
     rb_hash_aset(parser->headers, STR_pseudo_rx, INT2FIX(read_bytes));
   return parser->headers;
+}
+
+noreturn VALUE Parser_parse_headers_rescue(VALUE args, VALUE error) {
+  RAISE_BAD_REQUEST("Invalid character sequences in method or header name");
+}
+
+/* call-seq: parser.parse_headers -> headers
+ *
+ * Parses headers from the associated IO instance, returning a hash mapping
+ * header keys to their respective values. Header keys are downcased and dashes
+ * are converted to underscores. The returned headers will also include the
+ * following pseudo-headers:
+ * 
+ * - `':protocol'` - the protocol as specified in the query line / status line
+ * - `':path'` - the query path (for HTTP requests)
+ * - `':method'` - the HTTP method (for HTTP requests)
+ * - `':status'` - the HTTP status (for HTTP responses)
+ * - `':rx'` - the total number of bytes read by the parser
+ */
+VALUE Parser_parse_headers(VALUE self) {
+  return rb_rescue2(
+    Parser_parse_headers_safe, self,
+    Parser_parse_headers_rescue, self,
+    eArgumentError, (VALUE)0
+  );
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -88,6 +88,11 @@ class H1PServerTest < MiniTest::Test
     assert_raises(Error) { @parser.parse_headers }
   end
 
+  def test_invalid_method_string
+    @o << "\x02\x78\x83\x2 / HTTP/1.1\r\n\r\n"
+    assert_raises(Error) { @parser.parse_headers }
+  end
+
   def test_path_characters
     @o << "GET /äBçDé¤23~{@€ HTTP/1.1\r\n\r\n"
     headers = @parser.parse_headers
@@ -189,6 +194,11 @@ class H1PServerTest < MiniTest::Test
     headers = @parser.parse_headers
     assert_equal 'bbb', headers['a']
     assert_equal 'ddd', headers['c']
+  end
+
+  def test_invalid_headers
+    @o << "GET / HTTP/1.1\r\n\foo\x02\x78\x83\x02: bar\n\r\n"
+    assert_raises(Error) { @parser.parse_headers }
   end
 
   def test_headers_multiple_values
