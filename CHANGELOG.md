@@ -1,3 +1,7 @@
+## 1.1 2023-07-01
+
+- Rescue `ArgumentError` in `#parse_headers` (#4)
+
 ## 1.0 2023-06-07
 
 - Add support for array as header value (#2)
