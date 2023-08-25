@@ -201,6 +201,9 @@ VALUE Parser_initialize(VALUE self, VALUE io, VALUE mode) {
   parser->body_read_mode = BODY_READ_MODE_UNKNOWN;
   parser->body_left = 0;
 
+  RB_GC_GUARD(parser->io);
+  RB_GC_GUARD(parser->buffer);
+
   parser->buf_ptr = 0;
   parser->buf_len = 0;
   parser->buf_pos = 0;
